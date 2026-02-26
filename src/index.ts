@@ -65,6 +65,19 @@ export type {
   SignalConfig,
   TelegramConfig,
   DiscordConfig,
+  iMessageConfig,
+  SlackConfig,
+  SMSConfig,
+  EmailConfig,
+  TeamsConfig,
+  MatrixConfig,
+  IRCConfig,
+  MessengerConfig,
+  GoogleChatConfig,
+  XConfig,
+  LINEConfig,
+  WeChatConfig,
+  WebhookConfig,
 } from "./messaging/types.js";
 
 // Messaging bridge
@@ -76,3 +89,16 @@ export { WhatsAppAdapter } from "./messaging/adapters/whatsapp.js";
 export { SignalAdapter } from "./messaging/adapters/signal.js";
 export { TelegramAdapter } from "./messaging/adapters/telegram.js";
 export { DiscordAdapter } from "./messaging/adapters/discord.js";
+export { iMessageAdapter } from "./messaging/adapters/imessage.js";
+export { SlackAdapter } from "./messaging/adapters/slack.js";
+export { SMSAdapter } from "./messaging/adapters/sms.js";
+export { EmailAdapter } from "./messaging/adapters/email.js";
+export { TeamsAdapter } from "./messaging/adapters/teams.js";
+export { MatrixAdapter } from "./messaging/adapters/matrix.js";
+export { IRCAdapter } from "./messaging/adapters/irc.js";
+export { MessengerAdapter } from "./messaging/adapters/messenger.js";
+export { GoogleChatAdapter } from "./messaging/adapters/googlechat.js";
+export { XAdapter } from "./messaging/adapters/x.js";
+export { LINEAdapter } from "./messaging/adapters/line.js";
+export { WeChatAdapter } from "./messaging/adapters/wechat.js";
+export { WebhookAdapter } from "./messaging/adapters/webhook.js";
