@@ -1,0 +1,58 @@
+{
+  "name": "openclaw-spa",
+  "version": "1.0.0",
+  "description": "Signed Prompt Architecture — cryptographic authorization layer for OpenClaw AI agents",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "claw-spa": "dist/cli/main.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "cli": "tsx src/cli/main.ts",
+    "bridge": "tsx src/messaging/server.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/ --ext .ts,.tsx",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "openclaw",
+    "ai-security",
+    "prompt-signing",
+    "cryptographic-authorization",
+    "agent-safety"
+  ],
+  "author": "Mediocr3Mik3",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mediocr3Mik3/open-claw-spa.git"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "optionalDependencies": {
+    "ws": "^8.18.0",
+    "electron": "^33.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-native": "^0.75.0",
+    "expo-secure-store": "^13.0.0",
+    "expo-local-authentication": "^14.0.0",
+    "react-native-safe-area-context": "^4.14.0",
+    "uuid": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
