@@ -81,6 +81,49 @@ const api = {
   getVersion: () => ipcRenderer.invoke("app:get-version"),
   openExternal: (url: string) => ipcRenderer.invoke("app:open-external", url),
   getPaths: () => ipcRenderer.invoke("app:get-paths"),
+
+  // ─── Hardware & Recommendations ────────────────────────────────────
+  hardware: {
+    profile: () => ipcRenderer.invoke("hardware:profile"),
+    quickProfile: () => ipcRenderer.invoke("hardware:quick-profile"),
+    recommendations: () => ipcRenderer.invoke("hardware:recommendations"),
+  },
+
+  // ─── LLM Provider Management ──────────────────────────────────────
+  llm: {
+    switch: (opts: { provider_id: string; model_id: string }) =>
+      ipcRenderer.invoke("llm:switch", opts),
+    status: () => ipcRenderer.invoke("llm:status"),
+    listProviders: () => ipcRenderer.invoke("llm:list-providers"),
+    listModels: (providerId: string) => ipcRenderer.invoke("llm:list-models", providerId),
+    allStatuses: () => ipcRenderer.invoke("llm:all-statuses"),
+    complete: (opts: { messages: { role: string; content: string }[]; options?: Record<string, unknown> }) =>
+      ipcRenderer.invoke("llm:complete", opts),
+    onProviderEvent: (callback: (event: unknown) => void) => {
+      ipcRenderer.on("provider-event", (_event, data) => callback(data));
+    },
+  },
+
+  // ─── API Key Vault ────────────────────────────────────────────────
+  vault: {
+    list: () => ipcRenderer.invoke("vault:list"),
+    setKey: (keyName: string, value: string) => ipcRenderer.invoke("vault:set-key", keyName, value),
+    removeKey: (keyName: string) => ipcRenderer.invoke("vault:remove-key", keyName),
+    hasKey: (keyName: string) => ipcRenderer.invoke("vault:has-key", keyName),
+    configuredProviders: () => ipcRenderer.invoke("vault:configured-providers"),
+  },
+
+  // ─── Spend Tracking ───────────────────────────────────────────────
+  spend: {
+    summary: (since?: string, until?: string) => ipcRenderer.invoke("spend:summary", since, until),
+    daily: (days?: number) => ipcRenderer.invoke("spend:daily", days),
+    budget: () => ipcRenderer.invoke("spend:budget"),
+    setBudget: (config: Record<string, unknown>) => ipcRenderer.invoke("spend:set-budget", config),
+    recent: (limit?: number) => ipcRenderer.invoke("spend:recent", limit),
+    onUpdate: (callback: (data: { total_usd: number; budget_percent: number }) => void) => {
+      ipcRenderer.on("spend-update", (_event, data) => callback(data));
+    },
+  },
 };
 
 export type SPADesktopAPI = typeof api;

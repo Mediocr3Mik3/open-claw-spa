@@ -29,6 +29,13 @@ import {
   serializeEnvelope,
 } from "../../crypto/envelope.js";
 import type { AuthLevel, SigningAlgorithm } from "../../types.js";
+import { profileHardware, quickProfile } from "../../providers/hardware-profiler.js";
+import { generateRecommendations } from "../../providers/model-database.js";
+import { activeProvider } from "../../providers/active-provider.js";
+import { APIKeyVault, type VaultBackend } from "../../providers/vault.js";
+import { SpendTracker } from "../../providers/spend-tracker.js";
+import { PROVIDER_REGISTRY, getProviderDef } from "../../providers/registry.js";
+import type { BudgetConfig } from "../../providers/types.js";
 
 // ─── Paths ───────────────────────────────────────────────────────────────
 
@@ -498,6 +505,206 @@ ipcMain.handle("app:get-paths", async () => {
   };
 });
 
+// ─── LLM Provider System ────────────────────────────────────────────────
+
+// Vault: wraps EncryptedConfig as a VaultBackend for the APIKeyVault
+const vaultBackend: VaultBackend = {
+  get: (key: string) => getConfig().get(key),
+  set: (key: string, value: string) => getConfig().set(key, value),
+  delete: (key: string) => getConfig().delete(key),
+  has: (key: string) => getConfig().has(key),
+  keys: () => getConfig().keys(),
+};
+const vault = new APIKeyVault(vaultBackend);
+
+// Spend tracker: persists to SPA_DIR/spend-log.ndjson
+const spendTracker = new SpendTracker({
+  data_dir: SPA_DIR,
+  onBudgetUpdate: (totalUsd) => {
+    activeProvider.updateSpend(totalUsd);
+    mainWindow?.webContents.send("spend-update", {
+      total_usd: totalUsd,
+      budget_percent: spendTracker.getBudgetUsagePercent(),
+    });
+  },
+});
+
+// Wire vault into the active provider manager
+activeProvider.setVault({
+  get: (key: string) => vault.getKey(key),
+});
+
+// Forward provider events to the renderer
+activeProvider.subscribe((event) => {
+  mainWindow?.webContents.send("provider-event", event);
+  getAudit().log({
+    event_type: event.type === "provider_switched" ? "config_changed" : "app_started",
+    detail: event.detail,
+    metadata: { provider_id: event.provider_id, model_id: event.model_id },
+  });
+});
+
+// ─── IPC Handlers: Hardware & Recommendations ───────────────────────────
+
+ipcMain.handle("hardware:profile", async () => {
+  return profileHardware();
+});
+
+ipcMain.handle("hardware:quick-profile", async () => {
+  return quickProfile();
+});
+
+ipcMain.handle("hardware:recommendations", async () => {
+  const profile = profileHardware();
+  return generateRecommendations(profile);
+});
+
+// ─── IPC Handlers: LLM Provider Management ──────────────────────────────
+
+ipcMain.handle("llm:switch", async (_event, opts: { provider_id: string; model_id: string }) => {
+  const result = await activeProvider.switchTo(opts.provider_id, opts.model_id);
+  if (result.success) {
+    getAudit().log({
+      event_type: "config_changed",
+      detail: `LLM switched to ${opts.provider_id}/${opts.model_id}`,
+    });
+  }
+  return result;
+});
+
+ipcMain.handle("llm:status", async () => {
+  const current = activeProvider.get();
+  if (!current) return { active: false };
+  const health = await current.ping();
+  return {
+    active: true,
+    provider_id: current.id,
+    provider_name: current.name,
+    model_id: current.getActiveModel(),
+    type: current.type,
+    health,
+  };
+});
+
+ipcMain.handle("llm:list-providers", async () => {
+  return PROVIDER_REGISTRY.map(p => ({
+    ...p,
+    configured: p.requires_vault_key
+      ? p.vault_key_names.every(k => vault.hasKey(k))
+      : true,
+    models: p.models.map(m => ({ id: m.id, label: m.label, context_window: m.context_window })),
+  }));
+});
+
+ipcMain.handle("llm:list-models", async (_event, providerId: string) => {
+  const adapter = activeProvider.get();
+  if (adapter && adapter.id === providerId) {
+    return adapter.listAvailableModels();
+  }
+  // For non-active providers, return static list from registry
+  const def = getProviderDef(providerId);
+  return def?.models.map(m => m.id) ?? [];
+});
+
+ipcMain.handle("llm:all-statuses", async () => {
+  return activeProvider.getAllStatuses();
+});
+
+ipcMain.handle("llm:complete", async (_event, opts: {
+  messages: { role: string; content: string }[];
+  options?: Record<string, unknown>;
+}) => {
+  const adapter = activeProvider.get();
+  if (!adapter) throw new Error("No active LLM provider. Configure one in Settings.");
+
+  // Secret leak detection on outgoing messages
+  for (const msg of opts.messages) {
+    const scan = APIKeyVault.scanForSecrets(msg.content);
+    if (scan.leaked) {
+      getAudit().log({
+        event_type: "intrusion_alert",
+        detail: `Secret leak blocked: ${scan.matches.join(", ")} detected in outgoing prompt`,
+      });
+      throw new Error(`Blocked: potential API key detected in message (${scan.matches.join(", ")}). Remove secrets before sending.`);
+    }
+  }
+
+  const result = await adapter.complete(opts.messages as any, opts.options as any);
+
+  // Track spend
+  if (result.usage) {
+    spendTracker.record({
+      provider_id: adapter.id,
+      model_id: adapter.getActiveModel(),
+      usage: result.usage,
+    });
+  }
+
+  return result;
+});
+
+// ─── IPC Handlers: API Key Vault ────────────────────────────────────────
+
+ipcMain.handle("vault:list", async () => {
+  return vault.listEntries();
+});
+
+ipcMain.handle("vault:set-key", async (_event, keyName: string, value: string) => {
+  const result = vault.setKey(keyName, value);
+  getAudit().log({
+    event_type: "config_changed",
+    detail: `Vault key set: ${keyName}${result.warning ? ` (warning: ${result.warning})` : ""}`,
+  });
+  return result;
+});
+
+ipcMain.handle("vault:remove-key", async (_event, keyName: string) => {
+  const result = vault.removeKey(keyName);
+  if (result) {
+    getAudit().log({
+      event_type: "config_changed",
+      detail: `Vault key removed: ${keyName}`,
+    });
+  }
+  return result;
+});
+
+ipcMain.handle("vault:has-key", async (_event, keyName: string) => {
+  return vault.hasKey(keyName);
+});
+
+ipcMain.handle("vault:configured-providers", async () => {
+  return vault.getConfiguredProviders();
+});
+
+// ─── IPC Handlers: Spend Tracking ───────────────────────────────────────
+
+ipcMain.handle("spend:summary", async (_event, since?: string, until?: string) => {
+  return spendTracker.getSummary(since, until);
+});
+
+ipcMain.handle("spend:daily", async (_event, days?: number) => {
+  return spendTracker.getDailySpend(days);
+});
+
+ipcMain.handle("spend:budget", async () => {
+  return {
+    ...spendTracker.getBudget(),
+    current_spend: spendTracker.getCurrentMonthSpend(),
+    usage_percent: spendTracker.getBudgetUsagePercent(),
+  };
+});
+
+ipcMain.handle("spend:set-budget", async (_event, config: Partial<BudgetConfig>) => {
+  spendTracker.setBudget(config);
+  activeProvider.setBudget(spendTracker.getBudget(), spendTracker.getCurrentMonthSpend());
+  return spendTracker.getBudget();
+});
+
+ipcMain.handle("spend:recent", async (_event, limit?: number) => {
+  return spendTracker.getRecent(limit);
+});
+
 // ─── App Lifecycle ───────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
@@ -536,11 +743,18 @@ app.whenReady().then(() => {
   if (fs.existsSync(SETUP_FLAG)) {
     startBridge();
   }
+
+  // Start LLM provider health polling (every 30 seconds)
+  activeProvider.startHealthPolling(30_000);
+
+  // Wire budget config into provider manager
+  activeProvider.setBudget(spendTracker.getBudget(), spendTracker.getCurrentMonthSpend());
 });
 
 app.on("before-quit", () => {
   getAudit().log({ event_type: "app_stopped", detail: "Application closing" });
   stopBridge();
+  activeProvider.dispose();
   _audit?.close();
 });
 
