@@ -102,3 +102,11 @@ export { XAdapter } from "./messaging/adapters/x.js";
 export { LINEAdapter } from "./messaging/adapters/line.js";
 export { WeChatAdapter } from "./messaging/adapters/wechat.js";
 export { WebhookAdapter } from "./messaging/adapters/webhook.js";
+
+// Enterprise modules
+export { AuditLog } from "./enterprise/audit.js";
+export { EncryptedConfig } from "./enterprise/encrypted-config.js";
+export { JWTAuthManager } from "./enterprise/jwt-auth.js";
+export { KeyRotationManager } from "./enterprise/key-rotation.js";
+export { RateLimiter } from "./enterprise/rate-limiter.js";
+export { OrgManager } from "./enterprise/org.js";

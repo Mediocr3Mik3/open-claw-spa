@@ -1,0 +1,68 @@
+appId: com.openclaw.spa
+productName: OpenClaw SPA
+copyright: Copyright © 2026 Michael Freeman
+
+directories:
+  buildResources: build
+  output: release
+
+files:
+  - dist-electron/**/*
+  - dist-renderer/**/*
+  - "!node_modules/**/*.{ts,map,md}"
+
+extraMetadata:
+  main: dist-electron/main/index.js
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+  publisherName: Michael Freeman
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+        - arm64
+    - target: deb
+      arch:
+        - x64
+    - target: rpm
+      arch:
+        - x64
+  category: Development
+  maintainer: Michael Freeman
+
+publish:
+  provider: github
+  owner: Mediocr3Mik3
+  repo: open-claw-spa
+
+electronDownload:
+  mirror: https://github.com/electron/electron/releases/download/
