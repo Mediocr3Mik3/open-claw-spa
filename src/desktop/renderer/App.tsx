@@ -8,7 +8,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
-import { C, glass, Dot, Pill, Btn, Modal, injectCSS, Spinner } from "./components/shared";
+import { C, glass, Dot, Pill, Btn, Modal, injectCSS, Spinner, getTheme, setTheme } from "./components/shared";
+import type { Theme } from "./components/shared";
 import type { View, KeyInfo, Message, AuditEntry, SetupDetection } from "./components/shared";
 import DashboardView from "./components/DashboardView";
 import AgentsView from "./components/AgentsView";
@@ -201,6 +202,7 @@ export default function App() {
   const [ready, setReady] = useState<boolean | null>(null);
   const [view, setView] = useState<View>("overview");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [theme, setThemeState] = useState<Theme>(getTheme());
   const [settingsSub, setSettingsSub] = useState("general");
   const [msgs, setMsgs] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -309,6 +311,10 @@ export default function App() {
           className="oc-tooltip" data-tip="Settings"
           style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.border}`, background: settingsOpen ? C.accentSoft : "transparent", color: settingsOpen ? C.accent : C.muted, fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6, transition: "all .15s" }}
           dangerouslySetInnerHTML={{ __html: "&#9881;" }} />
+        <button onClick={() => { const next: Theme = theme === "dark" ? "light" : "dark"; setTheme(next); setThemeState(next); }}
+          className="oc-tooltip" data-tip={theme === "dark" ? "Light Mode" : "Dark Mode"}
+          style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6, transition: "all .15s" }}
+          dangerouslySetInnerHTML={{ __html: theme === "dark" ? "&#9788;" : "&#9790;" }} />
         <button onClick={() => setPaletteOpen(true)}
           style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, fontWeight: 600 }}>
           {isDarwin ? "\u2318K" : "^K"}
