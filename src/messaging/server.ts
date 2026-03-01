@@ -34,6 +34,19 @@ import { WhatsAppAdapter } from "./adapters/whatsapp.js";
 import { SignalAdapter } from "./adapters/signal.js";
 import { TelegramAdapter } from "./adapters/telegram.js";
 import { DiscordAdapter } from "./adapters/discord.js";
+import { iMessageAdapter } from "./adapters/imessage.js";
+import { SlackAdapter } from "./adapters/slack.js";
+import { SMSAdapter } from "./adapters/sms.js";
+import { EmailAdapter } from "./adapters/email.js";
+import { TeamsAdapter } from "./adapters/teams.js";
+import { MatrixAdapter } from "./adapters/matrix.js";
+import { IRCAdapter } from "./adapters/irc.js";
+import { MessengerAdapter } from "./adapters/messenger.js";
+import { GoogleChatAdapter } from "./adapters/googlechat.js";
+import { XAdapter } from "./adapters/x.js";
+import { LINEAdapter } from "./adapters/line.js";
+import { WeChatAdapter } from "./adapters/wechat.js";
+import { WebhookAdapter } from "./adapters/webhook.js";
 import type { MessagingBridgeConfig, ChannelMessage, ChannelReply } from "./types.js";
 
 // ─── Config from environment ─────────────────────────────────────────────
@@ -278,6 +291,265 @@ if (process.env["DISCORD_BOT_TOKEN"]) {
 
   console.log("[Server] Discord adapter enabled");
   dc.connect();
+}
+
+// ─── iMessage (macOS only) ────────────────────────────────────────────────
+
+if (process.env["IMESSAGE_ENABLED"] === "true" && process.platform === "darwin") {
+  const im = new iMessageAdapter({
+    chat_db_path: process.env["IMESSAGE_CHAT_DB"],
+    poll_interval_ms: parseInt(process.env["IMESSAGE_POLL_INTERVAL"] ?? "3000", 10),
+  });
+
+  im.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  replyCallbacks.set("imessage", (reply) => im.sendReply(reply));
+  console.log("[Server] iMessage adapter enabled");
+  im.startPolling();
+}
+
+// ─── Slack ────────────────────────────────────────────────────────────────
+
+if (process.env["SLACK_BOT_TOKEN"]) {
+  const slack = new SlackAdapter({
+    bot_token: process.env["SLACK_BOT_TOKEN"]!,
+    app_token: process.env["SLACK_APP_TOKEN"] ?? "",
+    signing_secret: process.env["SLACK_SIGNING_SECRET"],
+  });
+
+  slack.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  replyCallbacks.set("slack", (reply) => slack.sendReply(reply));
+  console.log("[Server] Slack adapter enabled");
+  slack.connect();
+}
+
+// ─── SMS / Twilio ─────────────────────────────────────────────────────────
+
+if (process.env["TWILIO_ACCOUNT_SID"]) {
+  const sms = new SMSAdapter({
+    account_sid: process.env["TWILIO_ACCOUNT_SID"]!,
+    auth_token: process.env["TWILIO_AUTH_TOKEN"] ?? "",
+    from_number: process.env["TWILIO_FROM_NUMBER"] ?? "",
+  });
+
+  sms.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  app.post("/webhook/sms", (req, res) => { sms.handleWebhook(req, res); });
+  replyCallbacks.set("sms", (reply) => sms.sendReply(reply));
+  console.log("[Server] SMS/Twilio adapter enabled");
+}
+
+// ─── Email (IMAP/SMTP) ───────────────────────────────────────────────────
+
+if (process.env["EMAIL_IMAP_HOST"]) {
+  const email = new EmailAdapter({
+    imap_host: process.env["EMAIL_IMAP_HOST"]!,
+    imap_port: parseInt(process.env["EMAIL_IMAP_PORT"] ?? "993", 10),
+    smtp_host: process.env["EMAIL_SMTP_HOST"] ?? process.env["EMAIL_IMAP_HOST"]!,
+    smtp_port: parseInt(process.env["EMAIL_SMTP_PORT"] ?? "587", 10),
+    username: process.env["EMAIL_USERNAME"] ?? "",
+    password: process.env["EMAIL_PASSWORD"] ?? "",
+    poll_interval_ms: parseInt(process.env["EMAIL_POLL_INTERVAL"] ?? "30000", 10),
+  });
+
+  email.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  replyCallbacks.set("email", (reply) => email.sendReply(reply));
+  console.log("[Server] Email adapter enabled");
+  email.startPolling();
+}
+
+// ─── Microsoft Teams ──────────────────────────────────────────────────────
+
+if (process.env["TEAMS_APP_ID"]) {
+  const teams = new TeamsAdapter({
+    app_id: process.env["TEAMS_APP_ID"]!,
+    app_password: process.env["TEAMS_APP_PASSWORD"] ?? "",
+    tenant_id: process.env["TEAMS_TENANT_ID"],
+  });
+
+  teams.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  app.post("/webhook/teams", (req, res) => { teams.handleWebhook(req as any, res); });
+  replyCallbacks.set("teams", (reply) => teams.sendReply(reply, process.env["TEAMS_SERVICE_URL"] ?? "https://smba.trafficmanager.net/teams/", reply.recipient_id));
+  console.log("[Server] Microsoft Teams adapter enabled");
+}
+
+// ─── Matrix ───────────────────────────────────────────────────────────────
+
+if (process.env["MATRIX_HOMESERVER_URL"]) {
+  const matrix = new MatrixAdapter({
+    homeserver_url: process.env["MATRIX_HOMESERVER_URL"]!,
+    access_token: process.env["MATRIX_ACCESS_TOKEN"] ?? "",
+    user_id: process.env["MATRIX_USER_ID"] ?? "",
+    allowed_room_ids: process.env["MATRIX_ALLOWED_ROOMS"]?.split(",").map((s) => s.trim()).filter(Boolean),
+  });
+
+  matrix.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  replyCallbacks.set("matrix", (reply) => matrix.sendReply(reply, reply.recipient_id));
+  console.log("[Server] Matrix adapter enabled");
+  matrix.startSync();
+}
+
+// ─── IRC ──────────────────────────────────────────────────────────────────
+
+if (process.env["IRC_SERVER"]) {
+  const irc = new IRCAdapter({
+    server: process.env["IRC_SERVER"]!,
+    port: parseInt(process.env["IRC_PORT"] ?? "6697", 10),
+    nickname: process.env["IRC_NICK"] ?? "openclaw-spa",
+    channels: process.env["IRC_CHANNELS"]?.split(",").map((s) => s.trim()).filter(Boolean) ?? [],
+    tls: process.env["IRC_USE_TLS"] !== "false",
+    password: process.env["IRC_PASSWORD"],
+  });
+
+  irc.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  replyCallbacks.set("irc", (reply) => irc.sendReply(reply));
+  console.log("[Server] IRC adapter enabled");
+  irc.connect();
+}
+
+// ─── Facebook Messenger ───────────────────────────────────────────────────
+
+if (process.env["MESSENGER_PAGE_ACCESS_TOKEN"]) {
+  const messenger = new MessengerAdapter({
+    page_access_token: process.env["MESSENGER_PAGE_ACCESS_TOKEN"]!,
+    verify_token: process.env["MESSENGER_VERIFY_TOKEN"] ?? "spa-verify",
+    app_secret: process.env["MESSENGER_APP_SECRET"] ?? "",
+  });
+
+  messenger.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  app.get("/webhook/messenger", (req, res) => messenger.handleVerification(req as any, res));
+  app.post("/webhook/messenger", (req, res) => { messenger.handleWebhook(req as any, res); });
+  replyCallbacks.set("messenger", (reply) => messenger.sendReply(reply));
+  console.log("[Server] Facebook Messenger adapter enabled");
+}
+
+// ─── Google Chat ──────────────────────────────────────────────────────────
+
+if (process.env["GOOGLE_CHAT_SA_PATH"]) {
+  const gchat = new GoogleChatAdapter({
+    service_account_path: process.env["GOOGLE_CHAT_SA_PATH"]!,
+  });
+
+  gchat.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  app.post("/webhook/googlechat", (req, res) => { gchat.handleWebhook(req as any, res); });
+  replyCallbacks.set("googlechat", (reply) => gchat.sendReply(reply, reply.recipient_id));
+  console.log("[Server] Google Chat adapter enabled");
+}
+
+// ─── X (Twitter) DMs ─────────────────────────────────────────────────────
+
+if (process.env["X_BEARER_TOKEN"]) {
+  const xdm = new XAdapter({
+    bearer_token: process.env["X_BEARER_TOKEN"]!,
+    api_key: process.env["X_API_KEY"] ?? "",
+    api_secret: process.env["X_API_SECRET"] ?? "",
+    access_token: process.env["X_ACCESS_TOKEN"] ?? "",
+    access_token_secret: process.env["X_ACCESS_TOKEN_SECRET"] ?? "",
+    poll_interval_ms: parseInt(process.env["X_POLL_INTERVAL"] ?? "15000", 10),
+  });
+
+  xdm.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  replyCallbacks.set("x", (reply) => xdm.sendReply(reply));
+  console.log("[Server] X (Twitter) DM adapter enabled");
+  xdm.startPolling();
+}
+
+// ─── LINE ─────────────────────────────────────────────────────────────────
+
+if (process.env["LINE_CHANNEL_ACCESS_TOKEN"]) {
+  const line = new LINEAdapter({
+    channel_access_token: process.env["LINE_CHANNEL_ACCESS_TOKEN"]!,
+    channel_secret: process.env["LINE_CHANNEL_SECRET"] ?? "",
+  });
+
+  line.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  app.post("/webhook/line", (req, res) => { line.handleWebhook(req as any, res); });
+  replyCallbacks.set("line", (reply) => line.sendReply(reply));
+  console.log("[Server] LINE adapter enabled");
+}
+
+// ─── WeChat ───────────────────────────────────────────────────────────────
+
+if (process.env["WECHAT_APP_ID"]) {
+  const wechat = new WeChatAdapter({
+    app_id: process.env["WECHAT_APP_ID"]!,
+    app_secret: process.env["WECHAT_APP_SECRET"] ?? "",
+    token: process.env["WECHAT_TOKEN"] ?? "",
+    encoding_aes_key: process.env["WECHAT_ENCODING_AES_KEY"],
+  });
+
+  wechat.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  app.get("/webhook/wechat", (req, res) => wechat.handleVerification(req as any, res));
+  app.post("/webhook/wechat", (req, res) => { wechat.handleWebhook(req as any, res); });
+  replyCallbacks.set("wechat", (reply) => wechat.sendReply(reply));
+  console.log("[Server] WeChat adapter enabled");
+}
+
+// ─── Generic Webhook ──────────────────────────────────────────────────────
+
+if (process.env["WEBHOOK_REPLY_URL"]) {
+  const webhook = new WebhookAdapter({
+    reply_url: process.env["WEBHOOK_REPLY_URL"]!,
+    shared_secret: process.env["WEBHOOK_SECRET"],
+    reply_headers: process.env["WEBHOOK_CUSTOM_HEADERS"]
+      ? JSON.parse(process.env["WEBHOOK_CUSTOM_HEADERS"])
+      : undefined,
+  });
+
+  webhook.onIncoming(async (msg) => {
+    const result = await bridge.process(msg);
+    enqueue(msg, result);
+  });
+
+  app.post("/webhook/generic", (req, res) => { webhook.handleWebhook(req as any, res); });
+  replyCallbacks.set("webhook", (reply) => webhook.sendReply(reply));
+  console.log("[Server] Generic Webhook adapter enabled");
 }
 
 // ─── Start server ────────────────────────────────────────────────────────

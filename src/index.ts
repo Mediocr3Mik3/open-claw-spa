@@ -102,3 +102,62 @@ export { XAdapter } from "./messaging/adapters/x.js";
 export { LINEAdapter } from "./messaging/adapters/line.js";
 export { WeChatAdapter } from "./messaging/adapters/wechat.js";
 export { WebhookAdapter } from "./messaging/adapters/webhook.js";
+
+// Enterprise modules
+export { AuditLog } from "./enterprise/audit.js";
+export { EncryptedConfig } from "./enterprise/encrypted-config.js";
+export { JWTAuthManager } from "./enterprise/jwt-auth.js";
+export { KeyRotationManager } from "./enterprise/key-rotation.js";
+export { RateLimiter } from "./enterprise/rate-limiter.js";
+export { OrgManager } from "./enterprise/org.js";
+
+// LLM Providers
+export {
+  // Types
+  type HardwareProfile,
+  type ModelDefinition,
+  type ModelRecommendation,
+  type HardwareRecommendations,
+  type ProviderDefinition,
+  type CompletionOptions,
+  type StreamChunk,
+  type TokenUsage,
+  type ChatMessage,
+  type ProviderHealth,
+  type SwitchResult,
+  type VaultEntry,
+  type SpendRecord,
+  type SpendSummary,
+  type BudgetConfig,
+  type ProviderEvent,
+  // Hardware
+  profileHardware,
+  quickProfile,
+  // Models
+  generateRecommendations,
+  findModel,
+  ALL_MODELS,
+  LOCAL_MODELS,
+  API_MODELS,
+  // Base + Adapters
+  BaseLLMAdapter,
+  OllamaAdapter,
+  LlamaCppAdapter,
+  AnthropicAdapter,
+  OpenAIAdapter,
+  GroqAdapter,
+  // Registry
+  PROVIDER_REGISTRY,
+  getProviderDef,
+  // Active Provider
+  ActiveProviderManager,
+  activeProvider,
+  // Context
+  adaptContext,
+  truncateContext,
+  // Vault
+  APIKeyVault,
+  KEY_FORMATS,
+  // Spend
+  SpendTracker,
+} from "./providers/index.js";

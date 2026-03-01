@@ -36,6 +36,13 @@ import {
 } from "../crypto/envelope.js";
 import { ActionGateRegistry } from "../gates/registry.js";
 import type { AuthLevel, SigningAlgorithm } from "../types.js";
+import { profileHardware } from "../providers/hardware-profiler.js";
+import { generateRecommendations } from "../providers/model-database.js";
+import { activeProvider } from "../providers/active-provider.js";
+import { PROVIDER_REGISTRY } from "../providers/registry.js";
+import { APIKeyVault, KEY_FORMATS, type VaultBackend } from "../providers/vault.js";
+import { EncryptedConfig } from "../enterprise/encrypted-config.js";
+import { SpendTracker } from "../providers/spend-tracker.js";
 
 // ─── Paths ───────────────────────────────────────────────────────────────
 
@@ -212,6 +219,174 @@ function cmdGates(): void {
   console.log("  All other tools are ungated (standard level).");
 }
 
+// ─── CLI Vault + Provider Helpers ───────────────────────────────────────
+
+function getCliVault(): APIKeyVault {
+  const encConfig = new EncryptedConfig({ config_path: path.join(SPA_DIR, "config.encrypted.json") });
+  const backend: VaultBackend = {
+    get: (k) => encConfig.get(k),
+    set: (k, v) => encConfig.set(k, v),
+    delete: (k) => encConfig.delete(k),
+    has: (k) => encConfig.has(k),
+    keys: () => encConfig.keys(),
+  };
+  return new APIKeyVault(backend);
+}
+
+// ─── LLM Commands ───────────────────────────────────────────────────────
+
+async function cmdLlmSwitch(flags: Record<string, string>): Promise<void> {
+  const providerId = flags["provider"];
+  const modelId = flags["model"];
+  if (!providerId || !modelId) {
+    console.error("Missing --provider <id> --model <id>");
+    process.exit(1);
+  }
+
+  const vault = getCliVault();
+  activeProvider.setVault({ get: (k) => vault.getKey(k) });
+
+  console.log(`Switching to ${providerId}/${modelId}...`);
+  const result = await activeProvider.switchTo(providerId, modelId);
+  if (result.success) {
+    console.log(`\n  \u2713 Switched to ${result.current_provider}/${result.current_model} (${result.latency_ms}ms ping)`);
+  } else {
+    console.error(`\n  \u2717 Switch failed: ${result.reason}`);
+    process.exit(1);
+  }
+}
+
+async function cmdLlmStatus(): Promise<void> {
+  const vault = getCliVault();
+  activeProvider.setVault({ get: (k) => vault.getKey(k) });
+
+  console.log("\n  LLM Provider Status:\n");
+  for (const p of PROVIDER_REGISTRY) {
+    const configured = p.requires_vault_key
+      ? p.vault_key_names.every(k => vault.hasKey(k))
+      : true;
+    const icon = configured ? "\u2714" : "\u2718";
+    const color = configured ? "\x1b[32m" : "\x1b[31m";
+    console.log(`  ${color}${icon}\x1b[0m ${p.name.padEnd(20)} ${p.type.padEnd(6)} ${configured ? "configured" : "no key"}`);
+    if (p.models.length > 0) {
+      const modelNames = p.models.slice(0, 3).map(m => m.label).join(", ");
+      console.log(`    Models: ${modelNames}${p.models.length > 3 ? " ..." : ""}`);
+    }
+  }
+}
+
+function cmdLlmRecommend(): void {
+  console.log("\n  Scanning hardware...");
+  const profile = profileHardware();
+  const recs = generateRecommendations(profile);
+
+  console.log(`\n  ${recs.summary}\n`);
+
+  if (recs.preferred_runtime) {
+    console.log(`  Runtime: ${recs.preferred_runtime.name} v${recs.preferred_runtime.version ?? "unknown"} ${recs.preferred_runtime.running ? "(running)" : "(stopped)"}`);
+  } else {
+    console.log("  Runtime: None detected. Install Ollama for the easiest experience.");
+  }
+
+  console.log();
+  const tierLabels: Record<string, string> = {
+    best_performance: "\x1b[32m\u25CF Best Performance\x1b[0m",
+    sweet_spot: "\x1b[33m\u25CF Sweet Spot\x1b[0m",
+    fast_lean: "\x1b[34m\u25CF Fast & Lean\x1b[0m",
+  };
+
+  let lastTier = "";
+  for (const r of recs.recommendations) {
+    if (r.tier !== lastTier) {
+      console.log(`  ${tierLabels[r.tier] ?? r.tier}`);
+      lastTier = r.tier;
+    }
+    const offload = r.needs_ram_offload ? " [RAM offload]" : "";
+    console.log(`    ${r.model.label} ${r.quantization.name} (${r.quantization.size_gb}GB, ~${r.estimated_tokens_per_second} tok/s)${offload}`);
+  }
+
+  if (recs.warnings.length > 0) {
+    console.log("\n  Warnings:");
+    for (const w of recs.warnings) {
+      console.log(`    \u26A0 ${w}`);
+    }
+  }
+}
+
+// ─── Vault Commands ─────────────────────────────────────────────────────
+
+function cmdVaultList(): void {
+  const vault = getCliVault();
+  const entries = vault.listEntries();
+
+  console.log("\n  API Key Vault:\n");
+  for (const e of entries) {
+    const icon = e.key_present ? "\x1b[32m\u2714\x1b[0m" : "\x1b[31m\u2718\x1b[0m";
+    const valid = e.format_valid === false ? " \x1b[33m(invalid format)\x1b[0m" : "";
+    const used = e.last_used ? ` last used: ${new Date(e.last_used).toLocaleDateString()}` : "";
+    console.log(`  ${icon} ${e.key_name.padEnd(25)} ${e.provider_id.padEnd(12)} ${e.key_present ? "set" : "not set"}${valid}${used}`);
+  }
+
+  const configured = vault.getConfiguredProviders();
+  console.log(`\n  Configured providers: ${configured.join(", ") || "none"}`);
+}
+
+function cmdVaultSet(flags: Record<string, string>): void {
+  const keyName = flags["key"];
+  const value = flags["value"];
+  if (!keyName || !value) {
+    console.error("Missing --key <KEY_NAME> --value <api_key>");
+    console.error("Valid key names:");
+    for (const f of KEY_FORMATS) {
+      console.error(`  ${f.key_name} — ${f.description}`);
+    }
+    process.exit(1);
+  }
+
+  const vault = getCliVault();
+  const result = vault.setKey(keyName, value);
+  console.log(`\n  Key ${keyName} saved.`);
+  if (result.warning) {
+    console.log(`  \u26A0 Warning: ${result.warning}`);
+  }
+}
+
+function cmdVaultRemove(flags: Record<string, string>): void {
+  const keyName = flags["key"];
+  if (!keyName) { console.error("Missing --key <KEY_NAME>"); process.exit(1); }
+
+  const vault = getCliVault();
+  const ok = vault.removeKey(keyName);
+  console.log(ok ? `  Key ${keyName} removed.` : `  Key ${keyName} not found.`);
+}
+
+// ─── Spend Command ──────────────────────────────────────────────────────
+
+function cmdSpend(): void {
+  const tracker = new SpendTracker({ data_dir: SPA_DIR });
+  const summary = tracker.getSummary();
+  const budget = tracker.getBudget();
+
+  console.log("\n  Spend Summary (current month):\n");
+  console.log(`  Total cost:    $${summary.total_cost_usd.toFixed(4)}`);
+  console.log(`  Input tokens:  ${summary.total_input_tokens.toLocaleString()}`);
+  console.log(`  Output tokens: ${summary.total_output_tokens.toLocaleString()}`);
+
+  if (Object.keys(summary.by_provider).length > 0) {
+    console.log("\n  By provider:");
+    for (const [pid, data] of Object.entries(summary.by_provider)) {
+      console.log(`    ${pid.padEnd(12)} $${data.cost_usd.toFixed(4)} (${data.tokens.toLocaleString()} tokens)`);
+    }
+  }
+
+  if (budget.enabled) {
+    const pct = tracker.getBudgetUsagePercent();
+    console.log(`\n  Budget: $${budget.monthly_limit_usd}/mo (${pct}% used)`);
+  } else {
+    console.log("\n  Budget: not set (use --set-budget to configure)");
+  }
+}
+
 function cmdHelp(): void {
   console.log(`
   openclaw-spa CLI — Signed Prompt Architecture
@@ -233,6 +408,18 @@ function cmdHelp(): void {
 
     gates     List all gated actions and their required levels
 
+    llm       LLM provider management
+      switch  --provider <id> --model <id>    Switch active LLM
+      status                                  Show all provider statuses
+      recommend                               Hardware scan + model recommendations
+
+    vault     API key vault management
+      list                                    Show all vault entries
+      set     --key <NAME> --value <key>      Add/update an API key
+      remove  --key <NAME>                    Remove an API key
+
+    spend     Show current month spend summary
+
     help      Show this help message
 
   Environment:
@@ -245,13 +432,48 @@ function cmdHelp(): void {
 
 const { command, flags } = parseArgs(process.argv.slice(2));
 
-switch (command) {
-  case "keygen":  cmdKeygen(flags); break;
-  case "sign":    cmdSign(flags); break;
-  case "verify":  cmdVerify(flags); break;
-  case "list":    cmdList(); break;
-  case "revoke":  cmdRevoke(flags); break;
-  case "gates":   cmdGates(); break;
-  case "help":
-  default:        cmdHelp(); break;
+// Handle async commands
+const asyncCommands: Record<string, (f: Record<string, string>) => Promise<void>> = {
+  "llm-switch": cmdLlmSwitch,
+  "llm-status": async () => { await cmdLlmStatus(); },
+};
+
+const subCommand = flags["_sub"] ?? "";
+const fullCommand = subCommand ? `${command}-${subCommand}` : command;
+
+if (fullCommand in asyncCommands) {
+  asyncCommands[fullCommand]!(flags).catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+} else {
+  switch (command) {
+    case "keygen":  cmdKeygen(flags); break;
+    case "sign":    cmdSign(flags); break;
+    case "verify":  cmdVerify(flags); break;
+    case "list":    cmdList(); break;
+    case "revoke":  cmdRevoke(flags); break;
+    case "gates":   cmdGates(); break;
+    case "llm": {
+      const sub = process.argv[3];
+      const subFlags = parseArgs(process.argv.slice(3)).flags;
+      if (sub === "switch") { cmdLlmSwitch(subFlags).catch(e => { console.error(e); process.exit(1); }); }
+      else if (sub === "status") { cmdLlmStatus().catch(e => { console.error(e); process.exit(1); }); }
+      else if (sub === "recommend") { cmdLlmRecommend(); }
+      else { console.error("Usage: llm <switch|status|recommend>"); }
+      break;
+    }
+    case "vault": {
+      const sub = process.argv[3];
+      const subFlags = parseArgs(process.argv.slice(3)).flags;
+      if (sub === "list") { cmdVaultList(); }
+      else if (sub === "set") { cmdVaultSet(subFlags); }
+      else if (sub === "remove") { cmdVaultRemove(subFlags); }
+      else { console.error("Usage: vault <list|set|remove>"); }
+      break;
+    }
+    case "spend":   cmdSpend(); break;
+    case "help":
+    default:        cmdHelp(); break;
+  }
 }

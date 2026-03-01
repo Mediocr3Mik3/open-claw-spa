@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "lib": ["ES2022"],
+    "outDir": "dist-electron",
+    "rootDir": "src",
+    "declaration": false,
+    "sourceMap": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": [
+    "src/desktop/main/**/*.ts",
+    "src/types.ts",
+    "src/crypto/**/*.ts",
+    "src/enterprise/**/*.ts",
+    "src/gates/**/*.ts",
+    "src/messaging/types.ts",
+    "src/messaging/bridge.ts",
+    "src/messaging/identity.ts",
+    "src/messaging/server.ts",
+    "src/messaging/adapters/**/*.ts",
+    "src/middleware/**/*.ts",
+    "src/providers/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-electron",
+    "dist-renderer",
+    "src/desktop/renderer/**",
+    "src/mobile/**"
+  ]
+}

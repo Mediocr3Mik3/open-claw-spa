@@ -33,6 +33,9 @@ const DEFAULT_ADMIN_GATES: GatedAction[] = [
   { tool: "key_revoke",       required_level: "admin", description: "Revoke SPA signing keys" },
   { tool: "gate_modify",      required_level: "admin", description: "Modify the gate registry itself" },
   { tool: "database_admin",   required_level: "admin", description: "Database DDL and admin operations" },
+  { tool: "vault_write_key",  required_level: "admin", description: "Add or update API keys in the vault" },
+  { tool: "vault_remove_key", required_level: "admin", description: "Remove API keys from the vault" },
+  { tool: "budget_modify",    required_level: "admin", description: "Modify spend budget configuration" },
 ];
 
 const DEFAULT_ELEVATED_GATES: GatedAction[] = [
@@ -52,6 +55,9 @@ const DEFAULT_ELEVATED_GATES: GatedAction[] = [
   { tool: "database_write",   required_level: "elevated", description: "Write to databases" },
   { tool: "calendar_modify",  required_level: "elevated", description: "Modify calendar events" },
   { tool: "message_send",     required_level: "elevated", description: "Send messages on behalf of user" },
+  { tool: "llm_switch",       required_level: "elevated", description: "Switch active LLM provider/model" },
+  { tool: "llm_add_provider", required_level: "elevated", description: "Add a new LLM provider configuration" },
+  { tool: "vault_read_key",   required_level: "elevated", description: "Read API keys from the vault" },
 ];
 
 export const DEFAULT_GATES: GatedAction[] = [
