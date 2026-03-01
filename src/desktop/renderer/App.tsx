@@ -420,7 +420,8 @@ export default function App() {
     if (!input.trim()) return;
     const text = input.trim(); setInput("");
     let token: string | undefined; let signed = false;
-    if (auth !== "standard" && keyId) {
+    // Security: ALWAYS sign when a key is available — no unsigned messages reach agents
+    if (keyId) {
       try { token = await window.spa.signMessage({ text, key_id: keyId, auth_level: auth }); signed = true; } catch {}
     }
     mc.current++; setMsgs(p => [...p, { id: mc.current, text, sender: "user", auth_level: auth, signed, timestamp: new Date().toISOString(), key_id: keyId ?? undefined }]);
