@@ -160,6 +160,49 @@ declare global {
         isEnabled: (agentId: string) => Promise<boolean>;
       };
       onIntrusionAlert: (callback: (alert: unknown) => void) => void;
+      installer: {
+        detect: (gatewayUrl?: string) => Promise<{
+          binary_found: boolean;
+          binary_path: string | null;
+          binary_version: string | null;
+          gateway_reachable: boolean;
+          gateway_url: string;
+          config_found: boolean;
+          config_path: string | null;
+          spa_setup_complete: boolean;
+          platform: { os: string; arch: string; home: string };
+          status: "not_installed" | "installed_not_running" | "running_not_configured" | "ready";
+        }>;
+        download: () => Promise<string>;
+        generateConfig: (config: {
+          environment: string; security_level: string; bind_address: string;
+          gateway_port: number; agent_name: string; agent_personality: string;
+          gate_preset: string; channels: Record<string, unknown>;
+        }) => Promise<unknown>;
+        writeConfig: (opts: {
+          gateway_config: Record<string, unknown>;
+          agent_name: string; agent_personality: string;
+        }) => Promise<string>;
+        startGateway: (binaryPath: string) => Promise<{ success: boolean; error?: string }>;
+        stopGateway: () => Promise<{ stopped: boolean }>;
+        verify: (gatewayUrl: string, token: string) => Promise<boolean>;
+        fullInstall: (config: {
+          environment: string; security_level: string; bind_address: string;
+          gateway_port: number; agent_name: string; agent_personality: string;
+          gate_preset: string; channels: Record<string, unknown>;
+        }) => Promise<{
+          success: boolean;
+          gateway_url: string;
+          gateway_token: string;
+          config_path: string;
+          binary_path: string;
+          agent_name: string;
+          security_score: number;
+          error?: string;
+        }>;
+        isGatewayRunning: () => Promise<boolean>;
+        onProgress: (callback: (progress: { step: string; message: string; percent: number; error?: string }) => void) => void;
+      };
     };
   }
 }

@@ -23,6 +23,8 @@ import { CommandPalette, ExecApprovalModal, useKeyboardShortcuts } from "./compo
 import type { ExecApproval } from "./components/Modals";
 import SkillsBrowser from "./components/SkillsBrowser";
 import GlobalPersonality from "./components/GlobalPersonality";
+import ZeroState from "./components/ZeroState";
+import InstallWizard from "./components/InstallWizard";
 
 // ─── Setup Wizard ────────────────────────────────────────────────────────
 
@@ -363,7 +365,24 @@ const NAV: { view: View; label: string; icon: string; shortcut: string }[] = [
 
 // ─── Main App ────────────────────────────────────────────────────────────
 
+type AppPhase = "loading" | "zero_state" | "install_wizard" | "legacy_setup" | "ready";
+
+interface DetectionResult {
+  binary_found: boolean;
+  binary_path: string | null;
+  binary_version: string | null;
+  gateway_reachable: boolean;
+  gateway_url: string;
+  config_found: boolean;
+  config_path: string | null;
+  spa_setup_complete: boolean;
+  platform: { os: string; arch: string; home: string };
+  status: "not_installed" | "installed_not_running" | "running_not_configured" | "ready";
+}
+
 export default function App() {
+  const [phase, setPhase] = useState<AppPhase>("loading");
+  const [detection, setDetection] = useState<DetectionResult | null>(null);
   const [ready, setReady] = useState<boolean | null>(null);
   const [view, setView] = useState<View>("overview");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -395,7 +414,37 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => { injectCSS(); window.spa.setup.isComplete().then(setReady); }, []);
+  // ─── Pre-flight: detect OpenClaw installation status ───
+  useEffect(() => {
+    injectCSS();
+    (async () => {
+      try {
+        const setupDone = await window.spa.setup.isComplete();
+        if (setupDone) {
+          // Already set up — go straight to dashboard
+          setReady(true);
+          setPhase("ready");
+          return;
+        }
+        // Not set up — detect OpenClaw installation
+        const det = await window.spa.installer.detect();
+        setDetection(det);
+        if (det.status === "ready" || det.status === "running_not_configured") {
+          // Gateway is running — go to legacy SPA setup (key gen etc.)
+          setReady(false);
+          setPhase("legacy_setup");
+        } else {
+          // Not installed or not running — show zero state
+          setPhase("zero_state");
+        }
+      } catch {
+        // If installer API not available, fall back to legacy flow
+        const setupDone = await window.spa.setup.isComplete();
+        setReady(setupDone);
+        setPhase(setupDone ? "ready" : "legacy_setup");
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -446,8 +495,45 @@ export default function App() {
     { id: "toggle-bridge", label: brOn ? "Stop Bridge" : "Start Bridge", sub: `Bridge is ${brOn ? "running" : "stopped"}`, icon: "&#9673;", action: () => brOn ? window.spa.bridge.stop() : window.spa.bridge.start() },
   ];
 
-  if (ready === null) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: C.bg, color: C.dim, fontFamily: C.font }}><Spinner size={28} /></div>;
-  if (!ready) return <SetupWizard onComplete={() => setReady(true)} />;
+  // ─── Phase-based rendering ───
+  if (phase === "loading") return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: C.bg, color: C.dim, fontFamily: C.font }}><Spinner size={28} /></div>;
+
+  if (phase === "zero_state" && detection) return (
+    <ZeroState
+      detection={detection}
+      onBeginInstall={() => setPhase("install_wizard")}
+      onConnectExisting={async (url) => {
+        await window.spa.config.set("OPENCLAW_GATEWAY_URL", url);
+        await window.spa.connectGateway(url);
+        setReady(false);
+        setPhase("legacy_setup");
+      }}
+      onRetry={async () => {
+        setPhase("loading");
+        const det = await window.spa.installer.detect();
+        setDetection(det);
+        if (det.status === "ready" || det.status === "running_not_configured") {
+          setReady(false);
+          setPhase("legacy_setup");
+        } else {
+          setPhase("zero_state");
+        }
+      }}
+    />
+  );
+
+  if (phase === "install_wizard" && detection) return (
+    <InstallWizard
+      detection={detection}
+      onComplete={async () => {
+        setReady(true);
+        setPhase("ready");
+      }}
+      onBack={() => setPhase("zero_state")}
+    />
+  );
+
+  if (phase === "legacy_setup" || (ready === false)) return <SetupWizard onComplete={() => { setReady(true); setPhase("ready"); }} />;
 
   const hasLLM = !!provStat?.provider_id;
   const isDarwin = navigator.userAgent.includes("Mac");

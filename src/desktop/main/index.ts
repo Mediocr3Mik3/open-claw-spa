@@ -42,6 +42,8 @@ import { ActionGateRegistry } from "../../gates/registry.js";
 import { KeyRotationManager } from "../../enterprise/key-rotation.js";
 import { RateLimiter } from "../../enterprise/rate-limiter.js";
 import { OrgManager } from "../../enterprise/org.js";
+import { OpenClawInstaller } from "./installer.js";
+import type { InstallConfig } from "./installer.js";
 
 // ─── Paths ───────────────────────────────────────────────────────────────
 // Initialized inside app.whenReady() — app.getPath() requires Electron ready.
@@ -1066,6 +1068,84 @@ ipcMain.handle("setup:install-runtime", async (_event, runtimeName: string) => {
   // For Windows/macOS, open the download page
   await shell.openExternal(url);
   return { success: true, method: "browser", url };
+});
+
+// ─── IPC Handlers: OpenClaw Installer ─────────────────────────────────────
+
+let _installer: OpenClawInstaller | null = null;
+function getInstaller(): OpenClawInstaller {
+  if (!_installer) {
+    _installer = new OpenClawInstaller(SPA_DIR);
+    _installer.onProgress((progress) => {
+      mainWindow?.webContents.send("installer-progress", progress);
+    });
+  }
+  return _installer;
+}
+
+ipcMain.handle("installer:detect", async (_event, gatewayUrl?: string) => {
+  return getInstaller().detect(gatewayUrl);
+});
+
+ipcMain.handle("installer:download", async () => {
+  return getInstaller().downloadBinary();
+});
+
+ipcMain.handle("installer:generate-config", async (_event, config: InstallConfig) => {
+  return getInstaller().generateConfig(config);
+});
+
+ipcMain.handle("installer:write-config", async (_event, opts: {
+  gateway_config: Record<string, unknown>;
+  agent_name: string;
+  agent_personality: string;
+}) => {
+  return getInstaller().writeConfig(opts.gateway_config, opts.agent_name, opts.agent_personality);
+});
+
+ipcMain.handle("installer:start-gateway", async (_event, binaryPath: string) => {
+  try {
+    await getInstaller().startGateway(binaryPath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle("installer:stop-gateway", async () => {
+  getInstaller().stopGateway();
+  return { stopped: true };
+});
+
+ipcMain.handle("installer:verify", async (_event, gatewayUrl: string, token: string) => {
+  return getInstaller().verify(gatewayUrl, token);
+});
+
+ipcMain.handle("installer:full-install", async (_event, config: InstallConfig) => {
+  const result = await getInstaller().install(config);
+
+  if (result.success) {
+    // Store gateway URL and token in encrypted config
+    const cfg = getConfig();
+    cfg.set("OPENCLAW_GATEWAY_URL", result.gateway_url);
+    cfg.set("OPENCLAW_GATEWAY_TOKEN", result.gateway_token);
+    cfg.set("OPENCLAW_BINARY_PATH", result.binary_path);
+    cfg.set("OPENCLAW_AGENT_NAME", result.agent_name);
+
+    getAudit().log({
+      event_type: "app_started",
+      detail: `OpenClaw installed: gateway=${result.gateway_url} agent=${result.agent_name} score=${result.security_score}`,
+    });
+
+    // Auto-connect to the new gateway
+    connectToGateway(result.gateway_url);
+  }
+
+  return result;
+});
+
+ipcMain.handle("installer:gateway-running", async () => {
+  return getInstaller().isGatewayRunning();
 });
 
 // ─── App Lifecycle ───────────────────────────────────────────────────────

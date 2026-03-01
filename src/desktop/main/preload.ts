@@ -242,6 +242,33 @@ const api = {
   onIntrusionAlert: (callback: (alert: unknown) => void) => {
     ipcRenderer.on("intrusion-alert", (_event, alert) => callback(alert));
   },
+
+  // ─── OpenClaw Installer ────────────────────────────────────────
+  installer: {
+    detect: (gatewayUrl?: string) => ipcRenderer.invoke("installer:detect", gatewayUrl),
+    download: () => ipcRenderer.invoke("installer:download"),
+    generateConfig: (config: {
+      environment: string; security_level: string; bind_address: string;
+      gateway_port: number; agent_name: string; agent_personality: string;
+      gate_preset: string; channels: Record<string, unknown>;
+    }) => ipcRenderer.invoke("installer:generate-config", config),
+    writeConfig: (opts: {
+      gateway_config: Record<string, unknown>;
+      agent_name: string; agent_personality: string;
+    }) => ipcRenderer.invoke("installer:write-config", opts),
+    startGateway: (binaryPath: string) => ipcRenderer.invoke("installer:start-gateway", binaryPath),
+    stopGateway: () => ipcRenderer.invoke("installer:stop-gateway"),
+    verify: (gatewayUrl: string, token: string) => ipcRenderer.invoke("installer:verify", gatewayUrl, token),
+    fullInstall: (config: {
+      environment: string; security_level: string; bind_address: string;
+      gateway_port: number; agent_name: string; agent_personality: string;
+      gate_preset: string; channels: Record<string, unknown>;
+    }) => ipcRenderer.invoke("installer:full-install", config),
+    isGatewayRunning: () => ipcRenderer.invoke("installer:gateway-running"),
+    onProgress: (callback: (progress: { step: string; message: string; percent: number; error?: string }) => void) => {
+      ipcRenderer.on("installer-progress", (_event, progress) => callback(progress));
+    },
+  },
 };
 
 export type SPADesktopAPI = typeof api;
