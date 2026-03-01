@@ -461,6 +461,7 @@ export default function App() {
           const active = view === n.view;
           return (
             <button key={n.view} onClick={() => setView(n.view)}
+              aria-label={`Navigate to ${n.label}`} aria-current={active ? "page" : undefined}
               className="oc-tooltip" data-tip={n.label}
               onMouseEnter={e => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
               onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}
@@ -474,20 +475,22 @@ export default function App() {
         })}
         <div style={{ flex: 1 }} />
         <button onClick={() => setSettingsOpen(true)}
-          className="oc-tooltip" data-tip="Settings"
+          aria-label="Open settings" className="oc-tooltip" data-tip="Settings"
           style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.border}`, background: settingsOpen ? C.accentSoft : "transparent", color: settingsOpen ? C.accent : C.muted, fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6, transition: "all .15s" }}
           dangerouslySetInnerHTML={{ __html: "&#9881;" }} />
         <button onClick={() => { const next: Theme = theme === "dark" ? "light" : "dark"; setTheme(next); setThemeState(next); }}
+          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
           className="oc-tooltip" data-tip={theme === "dark" ? "Light Mode" : "Dark Mode"}
           style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6, transition: "all .15s" }}
           dangerouslySetInnerHTML={{ __html: theme === "dark" ? "&#9788;" : "&#9790;" }} />
         <button onClick={() => setPaletteOpen(true)}
+          aria-label="Open command palette"
           style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, fontWeight: 600 }}>
           {isDarwin ? "\u2318K" : "^K"}
         </button>
         <div style={{ marginBottom: 14, display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 5 }}>
-          <Dot color={brOn ? C.ok : C.muted} pulse={brOn} size={6} />
-          <Dot color={gwOn ? C.ok : C.muted} size={6} />
+          <Dot color={brOn ? C.ok : C.muted} pulse={brOn} size={6} label={brOn ? "Bridge connected" : "Bridge disconnected"} />
+          <Dot color={gwOn ? C.ok : C.muted} size={6} label={gwOn ? "Gateway connected" : "Gateway disconnected"} />
         </div>
         {version && <div style={{ fontSize: 7, color: C.muted, marginBottom: 8, userSelect: "none" as const }}>v{version}</div>}
       </div>

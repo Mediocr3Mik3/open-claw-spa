@@ -131,6 +131,9 @@ export const injectCSS = () => {
     input::placeholder,textarea::placeholder{color:${C.muted}}
     input:focus,textarea:focus,select:focus{box-shadow:0 0 0 2px ${isDark ? "rgba(107,163,232,0.12)" : "rgba(74,143,212,0.12)"}}
     .oc-glass-hover:hover{border-color:${isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"} !important;background:${C.raised} !important}
+    *:focus-visible{outline:2px solid ${C.accent};outline-offset:2px;border-radius:4px}
+    [role="button"]:focus-visible,button:focus-visible{outline:2px solid ${C.accent};outline-offset:2px}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
   `;
   document.head.appendChild(s);
   injectMarble();
@@ -138,8 +141,8 @@ export const injectCSS = () => {
 
 // ─── Micro-Components ────────────────────────────────────────────────────
 
-export const Dot = ({ color, pulse, size }: { color: string; pulse?: boolean; size?: number }) => (
-  <span style={{ width: size ?? 8, height: size ?? 8, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0, animation: pulse ? "pulse 2s ease-in-out infinite" : "none" }} />
+export const Dot = ({ color, pulse, size, label }: { color: string; pulse?: boolean; size?: number; label?: string }) => (
+  <span role="status" aria-label={label ?? (pulse ? "active" : "inactive")} style={{ width: size ?? 8, height: size ?? 8, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0, animation: pulse ? "pulse 2s ease-in-out infinite" : "none" }} />
 );
 
 export const Pill = ({ children, color, bg, onClick }: { children: React.ReactNode; color?: string; bg?: string; onClick?: () => void }) => (
@@ -192,7 +195,7 @@ export const Empty = ({ icon, title, sub, action, onAction }: { icon: string; ti
 );
 
 export const Spinner = ({ size }: { size?: number }) => (
-  <div style={{ width: size ?? 22, height: size ?? 22, border: `2px solid ${C.accent}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin .8s linear infinite" }} />
+  <div role="status" aria-label="Loading" style={{ width: size ?? 22, height: size ?? 22, border: `2px solid ${C.accent}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin .8s linear infinite" }}><span className="sr-only">Loading...</span></div>
 );
 
 // ─── Modal / Overlay ─────────────────────────────────────────────────────
@@ -200,11 +203,12 @@ export const Spinner = ({ size }: { size?: number }) => (
 export function Modal({ open, onClose, title, width, children }: { open: boolean; onClose: () => void; title: string; width?: number; children: React.ReactNode }) {
   if (!open) return null;
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", animation: "fadeIn .15s ease" }} onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label={title} style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", animation: "fadeIn .15s ease" }} onClick={onClose}
+      onKeyDown={e => { if (e.key === "Escape") onClose(); }}>
       <div onClick={e => e.stopPropagation()} style={{ width: width ?? 480, maxHeight: "85vh", overflowY: "auto" as const, ...glass(1), padding: "28px 28px 24px", animation: "scaleIn .2s ease" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>{title}</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: C.dim, fontSize: 18, lineHeight: 1 }}>&times;</button>
+          <button onClick={onClose} aria-label="Close dialog" style={{ background: "none", border: "none", color: C.dim, fontSize: 18, lineHeight: 1 }}>&times;</button>
         </div>
         {children}
       </div>
@@ -216,9 +220,9 @@ export function Modal({ open, onClose, title, width, children }: { open: boolean
 
 export function SubTabs({ tabs, active, onChange }: { tabs: { id: string; label: string }[]; active: string; onChange: (id: string) => void }) {
   return (
-    <div style={{ display: "flex", gap: 2, background: C.surface, borderRadius: C.rs, padding: 3, border: `1px solid ${C.border}`, marginBottom: 22, width: "fit-content" }}>
+    <div role="tablist" style={{ display: "flex", gap: 2, background: C.surface, borderRadius: C.rs, padding: 3, border: `1px solid ${C.border}`, marginBottom: 22, width: "fit-content" }}>
       {tabs.map(t => (
-        <button key={t.id} onClick={() => onChange(t.id)} style={{ padding: "7px 18px", borderRadius: C.rx, border: "none", background: active === t.id ? C.accentSoft : "transparent", color: active === t.id ? C.accent : C.dim, fontSize: 12, fontWeight: 600 }}>{t.label}</button>
+        <button key={t.id} role="tab" aria-selected={active === t.id} tabIndex={active === t.id ? 0 : -1} onClick={() => onChange(t.id)} style={{ padding: "7px 18px", borderRadius: C.rx, border: "none", background: active === t.id ? C.accentSoft : "transparent", color: active === t.id ? C.accent : C.dim, fontSize: 12, fontWeight: 600 }}>{t.label}</button>
       ))}
     </div>
   );
