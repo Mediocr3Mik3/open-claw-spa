@@ -195,20 +195,29 @@ export default function ChatView({ msgs, input, setInput, auth, setAuth, keyId, 
               </div>
             </div>
           )}
-          {msgs.map(m => (
-            <div key={m.id} style={{ alignSelf: m.sender === "user" ? "flex-end" : "flex-start", maxWidth: "72%", animation: "fadeIn .15s ease" }}>
-              <div style={{ padding: "10px 16px", borderRadius: m.sender === "user" ? "14px 14px 3px 14px" : "14px 14px 14px 3px", background: m.sender === "user" ? "rgba(104,130,255,0.1)" : C.raised, border: `1px solid ${m.sender === "user" ? C.borderAccent : C.border}` }}>
-                <div style={{ display: "flex", gap: 5, marginBottom: 4, alignItems: "center", flexWrap: "wrap" as const }}>
-                  {m.auth_level && m.auth_level !== "standard" && <AuthBadge level={m.auth_level} />}
-                  <SignatureBadge status={m.signed ? "signed" : "unsigned"} keyId={m.key_id} onClick={() => setSigMsg(m)} />
-                  <span style={{ fontSize: 9, color: C.muted, marginLeft: "auto" }}>{new Date(m.timestamp).toLocaleTimeString()}</span>
+          {msgs.map(m => {
+            const isUser = m.sender === "user";
+            return (
+              <div key={m.id} style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: "72%", animation: "slideIn .2s ease" }}>
+                {/* Sender label */}
+                <div style={{ fontSize: 9, color: C.muted, marginBottom: 3, paddingLeft: isUser ? 0 : 4, paddingRight: isUser ? 4 : 0, textAlign: isUser ? "right" as const : "left" as const }}>
+                  {isUser ? "You" : selAgent?.name ?? "Agent"}
+                  {m.signed && <span style={{ color: C.ok, marginLeft: 4 }}>&#10003;</span>}
                 </div>
-                <div style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" as const }}>{m.text}</div>
-                {m.thinking && <ThinkingBlock text={m.thinking} />}
-                {m.tool_calls?.map((tc, i) => <ToolCallBlock key={i} tc={tc} />)}
+                <div style={{ padding: "11px 16px", borderRadius: isUser ? "18px 18px 4px 18px" : "18px 18px 18px 4px", background: isUser ? C.accentSoft : C.raised, border: `1px solid ${isUser ? C.borderAccent : C.border}`, transition: "all .15s" }}>
+                  <div style={{ fontSize: 14, lineHeight: 1.65, whiteSpace: "pre-wrap" as const, color: C.text }}>{m.text}</div>
+                  {m.thinking && <ThinkingBlock text={m.thinking} />}
+                  {m.tool_calls?.map((tc, i) => <ToolCallBlock key={i} tc={tc} />)}
+                  {/* Footer: badges + time */}
+                  <div style={{ display: "flex", gap: 5, marginTop: 6, alignItems: "center", flexWrap: "wrap" as const }}>
+                    {m.auth_level && m.auth_level !== "standard" && <AuthBadge level={m.auth_level} />}
+                    <SignatureBadge status={m.signed ? "signed" : "unsigned"} keyId={m.key_id} onClick={() => setSigMsg(m)} />
+                    <span style={{ fontSize: 9, color: C.muted, marginLeft: "auto" }}>{new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <div ref={end} />
         </div>
 
