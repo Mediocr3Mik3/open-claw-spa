@@ -16,6 +16,7 @@ import ChatView from "./components/ChatView";
 import KeysView from "./components/KeysView";
 import GatesView from "./components/GatesView";
 import AuditView from "./components/AuditView";
+import AuthorizationView from "./components/AuthorizationView";
 import SettingsView from "./components/SettingsView";
 import { CommandPalette, ExecApprovalModal, useKeyboardShortcuts } from "./components/Modals";
 import type { ExecApproval } from "./components/Modals";
@@ -325,7 +326,7 @@ export default function App() {
         {view === "agents" && <AgentsView onNav={navTo} onOpenChat={(id: string) => { setChatAgent(id); setView("chat"); }} />}
         {view === "chat" && <ChatView msgs={msgs} input={input} setInput={setInput} auth={auth} setAuth={setAuth} keyId={keyId} keys={keys} onSend={send} hasLLM={hasLLM} onNav={navTo} agentId={chatAgent} agents={agents} onAgentChange={setChatAgent} />}
         {view === "keys" && <KeysView keys={keys} keyId={keyId} setKeyId={setKeyId} refresh={refreshKeys} />}
-        {view === "authorization" && <><GatesView /><AuditView /></>}
+        {view === "authorization" && <AuthorizationView />}
         {view === "skills" && <SkillsBrowser />}
         {view === "personality" && <GlobalPersonality />}
       </div>
