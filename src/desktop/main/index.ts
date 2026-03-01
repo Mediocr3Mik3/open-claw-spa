@@ -334,12 +334,12 @@ function connectToGateway(url: string): void {
       console.log("[Desktop] Gateway connected");
     };
 
-    gatewayWs.onmessage = (event) => {
+    (gatewayWs as any).on("message", (raw: Buffer | string) => {
       try {
-        const data = JSON.parse(String(event.data));
+        const data = JSON.parse(String(raw));
         mainWindow?.webContents.send("gateway-message", data);
       } catch { /* ignore parse errors */ }
-    };
+    });
 
     gatewayWs.onclose = () => {
       gatewayConnected = false;
@@ -1103,26 +1103,30 @@ app.whenReady().then(async () => {
 
   createWindow();
 
-  // System tray
-  const icon = nativeImage.createEmpty();
-  tray = new Tray(icon);
-  tray.setToolTip("OpenClaw SPA");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: "Show Dashboard", click: () => mainWindow?.show() },
-      { type: "separator" },
-      {
-        label: "Start Bridge",
-        click: () => startBridge(),
-      },
-      {
-        label: "Stop Bridge",
-        click: () => stopBridge(),
-      },
-      { type: "separator" },
-      { label: "Quit", click: () => app.quit() },
-    ])
-  );
+  // System tray (macOS requires a non-empty icon)
+  try {
+    const trayIcon = nativeImage.createFromBuffer(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHklEQVQ4jWNgGAWjYBSMglEwCkbBKBgFo2AUDCQAAB6AAAGTfLhNAAAAAElFTkSuQmCC",
+        "base64"
+      )
+    );
+    trayIcon.setTemplateImage(true); // macOS menu bar styling
+    tray = new Tray(trayIcon);
+    tray.setToolTip("OpenClaw SPA");
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        { label: "Show Dashboard", click: () => mainWindow?.show() },
+        { type: "separator" },
+        { label: "Start Bridge", click: () => startBridge() },
+        { label: "Stop Bridge", click: () => stopBridge() },
+        { type: "separator" },
+        { label: "Quit", click: () => app.quit() },
+      ])
+    );
+  } catch (err) {
+    console.warn("[Main] Could not create tray:", err);
+  }
 
   // Log app start
   getAudit().log({ event_type: "app_started", detail: `Version ${app.getVersion()}` });

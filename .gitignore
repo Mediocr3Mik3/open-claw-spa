@@ -31,6 +31,9 @@ coverage/
 
 # Electron
 out/
+dist-electron/
+dist-renderer/
+.config-key
 
 # React Native
 ios/Pods/
