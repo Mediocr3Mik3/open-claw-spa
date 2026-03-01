@@ -9,7 +9,7 @@ import React, { useState, useEffect } from "react";
 import { C, glass, Dot, Pill, Card, Btn, Sec, StatCard, ProgressBar, Empty, Spinner } from "./shared";
 import type { View, KeyInfo, SetupDetection } from "./shared";
 
-export default function DashboardView({ onNav, gwOn, brOn, keys }: { onNav: (v: View, sub?: string) => void; gwOn: boolean; brOn: boolean; keys: KeyInfo[] }) {
+export default function DashboardView({ onNav, gwOn, brOn, keys }: { onNav: (v: View | "settings", sub?: string) => void; gwOn: boolean; brOn: boolean; keys: KeyInfo[] }) {
   const [det, setDet] = useState<SetupDetection | null>(null);
   const [prov, setProv] = useState<any>(null);
   const [spend, setSpend] = useState<any>(null);
@@ -46,8 +46,8 @@ export default function DashboardView({ onNav, gwOn, brOn, keys }: { onNav: (v: 
         setAdapterStatuses(statuses);
 
         const a: typeof alerts = [];
-        if (ch !== null) a.push({ type: "security", message: "Audit chain integrity compromised", color: C.err, action: () => onNav("audit") });
-        if ((as2 as any)?.intrusion_alert > 0) a.push({ type: "intrusion", message: `${(as2 as any).intrusion_alert} intrusion alert(s)`, color: C.err, action: () => onNav("audit") });
+        if (ch !== null) a.push({ type: "security", message: "Audit chain integrity compromised", color: C.err, action: () => onNav("authorization") });
+        if ((as2 as any)?.intrusion_alert > 0) a.push({ type: "intrusion", message: `${(as2 as any).intrusion_alert} intrusion alert(s)`, color: C.err, action: () => onNav("authorization") });
         if (!keys.some(k => k.active)) a.push({ type: "keys", message: "No active signing key — prompts won't be signed", color: C.warn, action: () => onNav("keys") });
         if ((s as any)?.budget_percent >= ((s as any)?.warn_at_percent ?? 80)) a.push({ type: "budget", message: `Budget at ${Math.round((s as any).budget_percent)}%`, color: C.warn });
         setAlerts(a);
@@ -111,7 +111,7 @@ export default function DashboardView({ onNav, gwOn, brOn, keys }: { onNav: (v: 
           { label: "Chat", sub: "Send signed messages", icon: "&#128172;", action: () => onNav("chat") },
           { label: "Models", sub: "Switch or configure LLM", icon: "&#129302;", action: () => onNav("settings", "llm") },
           { label: "Adapters", sub: "Connect messaging services", icon: "&#128268;", action: () => onNav("settings", "adapters") },
-          { label: "Audit", sub: "Review security events", icon: "&#128203;", action: () => onNav("audit") },
+          { label: "Audit", sub: "Review security events", icon: "&#128203;", action: () => onNav("authorization") },
         ].map(q => (
           <button key={q.label} onClick={q.action} style={{ ...glass(1), padding: 16, textAlign: "left" as const, cursor: "pointer", display: "flex", gap: 10, alignItems: "center", borderRadius: C.r, transition: "all .12s" }}>
             <span style={{ fontSize: 18, opacity: .4 }} dangerouslySetInnerHTML={{ __html: q.icon }} />
@@ -143,7 +143,7 @@ export default function DashboardView({ onNav, gwOn, brOn, keys }: { onNav: (v: 
             <div style={{ fontSize: 13, fontWeight: 600 }}>AES-256-GCM</div>
             <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>OS Keychain backed</div>
           </div>
-          <div onClick={() => onNav("audit")} style={{ cursor: "pointer" }}>
+          <div onClick={() => onNav("authorization")} style={{ cursor: "pointer" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <Dot color={chainOk ? C.ok : C.err} size={7} />
               <span style={{ fontSize: 10, color: C.dim, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: .5 }}>Audit Chain</span>

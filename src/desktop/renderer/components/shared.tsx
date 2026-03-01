@@ -1,29 +1,66 @@
 /**
- * openclaw-spa — Shared UI Components & Design Tokens
+ * openclaw-spa — Design System & Shared Components
  *
- * Extracted from monolithic App.tsx for modularity.
- * All tabs import from here for consistent styling.
+ * Marble-textured, theme-aware design system. Classical proportions meet
+ * futuristic minimalism. Every pixel serves a purpose.
+ *
+ * Palette: Sky blue primary · Emerald trust · Autumnal amber · Ruby red
+ * Backgrounds: Polished marble with subtle veining (dark/light modes)
+ *
+ * Philosophies: Steve Jobs (simplicity), Edwin Land (magic through
+ * immediacy), Akio Morita (elegant function).
  */
 
 import React, { useState, useEffect } from "react";
 
-// ─── Design Tokens ───────────────────────────────────────────────────────
+// ─── Theme System ────────────────────────────────────────────────────────
 
-export const C = {
-  bg: "#08080f", surface: "#0d0e1a", raised: "#121324", bright: "#1a1c30",
-  border: "rgba(255,255,255,0.06)", borderLight: "rgba(255,255,255,0.09)", borderAccent: "rgba(99,130,255,0.2)",
-  text: "#f0f0f8", dim: "#8b8da3", muted: "#4e5068",
-  accent: "#6882ff", accentSoft: "rgba(104,130,255,0.1)",
-  ok: "#34d399", okSoft: "rgba(52,211,153,0.08)",
-  warn: "#fbbf24", warnSoft: "rgba(251,191,36,0.08)",
-  err: "#f87171", errSoft: "rgba(248,113,113,0.08)",
-  grad: "linear-gradient(135deg, #6882ff 0%, #a855f7 100%)",
-  gradSoft: "linear-gradient(135deg, rgba(104,130,255,0.06) 0%, rgba(168,85,247,0.06) 100%)",
-  font: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif",
+export type Theme = "light" | "dark";
+let _theme: Theme = "dark";
+
+const DARK = {
+  bg: "#0b0b12", surface: "rgba(17,17,28,0.8)", raised: "rgba(26,26,48,0.85)", bright: "#1f1f38",
+  border: "rgba(255,255,255,0.06)", borderLight: "rgba(255,255,255,0.04)", borderAccent: "rgba(107,163,232,0.18)",
+  text: "#ede8e2", dim: "#8b8da3", muted: "#4e5068",
+  accent: "#6ba3e8", accentSoft: "rgba(107,163,232,0.1)",
+  ok: "#3ec989", okSoft: "rgba(62,201,137,0.08)",
+  warn: "#d4943a", warnSoft: "rgba(212,148,58,0.08)",
+  err: "#c94a4a", errSoft: "rgba(201,74,74,0.08)",
+  grad: "linear-gradient(135deg, #6ba3e8 0%, #a87bde 100%)",
+  gradSoft: "linear-gradient(135deg, rgba(107,163,232,0.06) 0%, rgba(168,123,222,0.06) 100%)",
+  marbleOpacity: 0.035,
+};
+
+const LIGHT = {
+  bg: "#f7f3ee", surface: "rgba(255,253,248,0.85)", raised: "rgba(255,255,255,0.92)", bright: "#ffffff",
+  border: "rgba(30,20,10,0.08)", borderLight: "rgba(30,20,10,0.05)", borderAccent: "rgba(74,143,212,0.18)",
+  text: "#1a1a2e", dim: "#5d5d73", muted: "#9b9baf",
+  accent: "#4a8fd4", accentSoft: "rgba(74,143,212,0.08)",
+  ok: "#2d8f63", okSoft: "rgba(45,143,99,0.06)",
+  warn: "#c47830", warnSoft: "rgba(196,120,48,0.06)",
+  err: "#b83a3a", errSoft: "rgba(184,58,58,0.06)",
+  grad: "linear-gradient(135deg, #4a8fd4 0%, #7b6cc7 100%)",
+  gradSoft: "linear-gradient(135deg, rgba(74,143,212,0.06) 0%, rgba(123,108,199,0.06) 100%)",
+  marbleOpacity: 0.05,
+};
+
+export const C: Record<string, any> = {
+  ...DARK,
+  font: "'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif",
   mono: "'SF Mono', 'JetBrains Mono', 'Cascadia Code', monospace",
   r: "12px", rs: "8px", rx: "6px",
   safePadTop: 38,
 };
+
+export function getTheme(): Theme { return _theme; }
+export function setTheme(t: Theme) {
+  _theme = t;
+  const v = t === "light" ? LIGHT : DARK;
+  Object.keys(v).forEach(k => { (C as any)[k] = (v as any)[k]; });
+  document.getElementById("oc")?.remove();
+  document.getElementById("oc-marble")?.remove();
+  injectCSS();
+}
 
 export const LEVEL: Record<string, string> = { standard: C.dim, elevated: C.warn, admin: C.err };
 export const EV_C: Record<string, string> = {
@@ -34,37 +71,68 @@ export const EV_C: Record<string, string> = {
 
 export const glass = (n = 0): React.CSSProperties => ({
   background: [C.surface, C.raised, C.bright][n],
+  backdropFilter: "blur(12px)",
   border: `1px solid ${C.border}`,
   borderRadius: C.r,
 });
+
+// ─── Marble Background ──────────────────────────────────────────────────
+
+function injectMarble() {
+  if (document.getElementById("oc-marble")) return;
+  const isDark = _theme === "dark";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.id = "oc-marble";
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "100%");
+  svg.style.cssText = "position:fixed;inset:0;z-index:-1;pointer-events:none";
+  svg.innerHTML = `
+    <defs>
+      <filter id="oc-vein" x="0" y="0" width="100%" height="100%" filterUnits="objectBoundingBox">
+        <feTurbulence type="fractalNoise" baseFrequency="0.012 0.055" numOctaves="5" seed="7" stitchTiles="stitch" result="n"/>
+        <feColorMatrix type="saturate" values="0" in="n" result="g"/>
+        <feComponentTransfer in="g" result="v">
+          <feFuncA type="table" tableValues="0 0.15 0.02 0.2 0.05 0.18 0.03 0.12 0"/>
+        </feComponentTransfer>
+      </filter>
+    </defs>
+    <rect width="100%" height="100%" fill="${C.bg}"/>
+    <rect width="100%" height="100%" filter="url(#oc-vein)" fill="${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}" opacity="${C.marbleOpacity}"/>
+  `;
+  document.body.prepend(svg);
+}
 
 // ─── CSS Injection ───────────────────────────────────────────────────────
 
 export const injectCSS = () => {
   if (document.getElementById("oc")) return;
+  const isDark = _theme === "dark";
   const s = document.createElement("style"); s.id = "oc";
   s.textContent = `
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
     @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-    @keyframes glow{0%,100%{box-shadow:0 0 8px rgba(104,130,255,0.15)}50%{box-shadow:0 0 20px rgba(104,130,255,0.3)}}
+    @keyframes glow{0%,100%{box-shadow:0 0 8px ${isDark ? "rgba(107,163,232,0.12)" : "rgba(74,143,212,0.12)"}}50%{box-shadow:0 0 20px ${isDark ? "rgba(107,163,232,0.25)" : "rgba(74,143,212,0.25)"}}}
     @keyframes spin{to{transform:rotate(360deg)}}
     @keyframes slideIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
     @keyframes scaleIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
-    @keyframes recordPulse{0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,0.4)}50%{box-shadow:0 0 0 6px rgba(248,113,113,0)}}
+    @keyframes recordPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,74,74,0.4)}50%{box-shadow:0 0 0 6px rgba(201,74,74,0)}}
+    @keyframes breathe{0%,100%{opacity:.7}50%{opacity:1}}
     *{margin:0;padding:0;box-sizing:border-box}
-    body{background:${C.bg};overflow:hidden;font-family:${C.font}}
+    body{background:${C.bg};overflow:hidden;font-family:${C.font};color:${C.text};-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
     ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}
-    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.07);border-radius:3px}
-    input,select,textarea{font-family:${C.font}}
+    ::-webkit-scrollbar-thumb{background:${isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.1)"};border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.15)"}}
+    input,select,textarea{font-family:${C.font};color:${C.text}}
     button{font-family:${C.font};cursor:pointer;transition:all .15s ease}
-    button:hover{filter:brightness(1.15)}button:active{transform:scale(.97)}
-    .oc-tooltip{position:relative}.oc-tooltip:hover::after{content:attr(data-tip);position:absolute;left:calc(100% + 10px);top:50%;transform:translateY(-50%);background:#1e1f34;color:#f0f0f8;padding:5px 12px;border-radius:8px;font-size:10px;white-space:nowrap;z-index:999;border:1px solid rgba(255,255,255,0.1);box-shadow:0 4px 16px rgba(0,0,0,0.4);pointer-events:none;letter-spacing:0.2px}
-    ::selection{background:rgba(104,130,255,0.3)}
-    input::placeholder,textarea::placeholder{color:#4e5068}
-    input:focus,textarea:focus,select:focus{box-shadow:0 0 0 2px rgba(104,130,255,0.12)}
-    .oc-glass-hover:hover{border-color:rgba(255,255,255,0.1) !important;background:${C.raised} !important}
+    button:hover{filter:brightness(1.12)}button:active{transform:scale(.97)}
+    .oc-tooltip{position:relative}.oc-tooltip:hover::after{content:attr(data-tip);position:absolute;left:calc(100% + 10px);top:50%;transform:translateY(-50%);background:${isDark ? "#1a1c34" : "#faf8f5"};color:${C.text};padding:5px 12px;border-radius:8px;font-size:10px;white-space:nowrap;z-index:999;border:1px solid ${C.border};box-shadow:0 4px 16px ${isDark ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.1)"};pointer-events:none;letter-spacing:0.2px}
+    ::selection{background:${isDark ? "rgba(107,163,232,0.3)" : "rgba(74,143,212,0.2)"}}
+    input::placeholder,textarea::placeholder{color:${C.muted}}
+    input:focus,textarea:focus,select:focus{box-shadow:0 0 0 2px ${isDark ? "rgba(107,163,232,0.12)" : "rgba(74,143,212,0.12)"}}
+    .oc-glass-hover:hover{border-color:${isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"} !important;background:${C.raised} !important}
   `;
   document.head.appendChild(s);
+  injectMarble();
 };
 
 // ─── Micro-Components ────────────────────────────────────────────────────
@@ -249,4 +317,4 @@ export interface BridgeLog { level: string; message: string; timestamp: string; 
 export interface ModelInfo { id: string; label: string; provider_id: string; parameter_count_b?: number; context_window?: number; strengths?: string[]; estimated_cost_per_1k_input?: number; estimated_cost_per_1k_output?: number; }
 export interface SetupDetection { hardware: { cpu: string; ram_gb: number; gpus: { name: string; vram_gb: number; vendor: string }[] }; runtimes: any[]; configured_providers: string[]; recommendations: { model: string; tier: string; reason: string; fits_in_memory: boolean }[]; summary: string; warnings: string[]; suggested_runtime: string; needs_runtime_install: boolean; }
 export interface AgentConfig { id: string; name: string; description?: string; auth_level: string; model_id?: string; model_provider?: string; status: "online" | "offline" | "error"; created_at: string; last_active?: string; tools?: string[]; brain_files?: { name: string; content: string }[]; }
-export type View = "dashboard" | "agents" | "chat" | "keys" | "gates" | "audit" | "settings" | "skills" | "personality";
+export type View = "overview" | "chat" | "agents" | "keys" | "authorization" | "skills" | "personality";

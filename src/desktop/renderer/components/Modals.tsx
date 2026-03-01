@@ -179,13 +179,11 @@ export function useKeyboardShortcuts({ onNav, onPalette, onNewItem }: {
       // Number keys for tab navigation
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         switch (e.key) {
-          case "1": onNav("dashboard"); return;
-          case "2": onNav("agents"); return;
-          case "3": onNav("chat"); return;
+          case "1": onNav("overview"); return;
+          case "2": onNav("chat"); return;
+          case "3": onNav("agents"); return;
           case "4": onNav("keys"); return;
-          case "5": onNav("gates"); return;
-          case "6": onNav("audit"); return;
-          case "7": onNav("settings"); return;
+          case "5": onNav("authorization"); return;
           case "/": e.preventDefault(); /* focus search handled per-tab */ return;
           case "n": case "N": onNewItem(); return;
           case "Escape": /* close modals handled by individual components */ return;

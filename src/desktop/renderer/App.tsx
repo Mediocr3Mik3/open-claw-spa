@@ -1,12 +1,14 @@
 /**
  * openclaw-spa — Desktop Renderer (React)
- * Redesigned: 7-tab modular architecture with command palette,
- * keyboard shortcuts, and exec approval flow.
+ *
+ * Simplified 6-section architecture: Overview, Chat, Agents, Keys,
+ * Authorization (gates+audit merged), Settings (modal overlay).
+ * Marble-textured UI with command palette and exec approval flow.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
-import { C, glass, Dot, Pill, Btn, injectCSS, Spinner } from "./components/shared";
+import { C, glass, Dot, Pill, Btn, Modal, injectCSS, Spinner } from "./components/shared";
 import type { View, KeyInfo, Message, AuditEntry, SetupDetection } from "./components/shared";
 import DashboardView from "./components/DashboardView";
 import AgentsView from "./components/AgentsView";
@@ -185,22 +187,19 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
 // ─── Nav Items ───────────────────────────────────────────────────────────
 
 const NAV: { view: View; label: string; icon: string; shortcut: string }[] = [
-  { view: "dashboard", label: "Dashboard", icon: "&#9670;", shortcut: "1" },
-  { view: "agents", label: "Agents", icon: "&#129302;", shortcut: "2" },
-  { view: "chat", label: "Chat", icon: "&#9673;", shortcut: "3" },
+  { view: "overview", label: "Overview", icon: "&#9670;", shortcut: "1" },
+  { view: "chat", label: "Chat", icon: "&#128172;", shortcut: "2" },
+  { view: "agents", label: "Agents", icon: "&#129302;", shortcut: "3" },
   { view: "keys", label: "Keys", icon: "&#128273;", shortcut: "4" },
-  { view: "gates", label: "Gates", icon: "&#128737;", shortcut: "5" },
-  { view: "audit", label: "Audit", icon: "&#128203;", shortcut: "6" },
-  { view: "skills", label: "Skills", icon: "&#129513;", shortcut: "7" },
-  { view: "personality", label: "You", icon: "&#10024;", shortcut: "8" },
-  { view: "settings", label: "Settings", icon: "&#9881;", shortcut: "9" },
+  { view: "authorization", label: "Auth", icon: "&#128737;", shortcut: "5" },
 ];
 
 // ─── Main App ────────────────────────────────────────────────────────────
 
 export default function App() {
   const [ready, setReady] = useState<boolean | null>(null);
-  const [view, setView] = useState<View>("dashboard");
+  const [view, setView] = useState<View>("overview");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSub, setSettingsSub] = useState("general");
   const [msgs, setMsgs] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -219,9 +218,13 @@ export default function App() {
   const [agents, setAgents] = useState<{id:string;name:string;status:string}[]>([]);
   const mc = useRef(0);
 
-  const navTo = useCallback((v: View, sub?: string) => {
-    setView(v);
-    if (v === "settings" && sub) setSettingsSub(sub);
+  const navTo = useCallback((v: View | "settings", sub?: string) => {
+    if (v === "settings") {
+      if (sub) setSettingsSub(sub);
+      setSettingsOpen(true);
+    } else {
+      setView(v as View);
+    }
   }, []);
 
   useEffect(() => { injectCSS(); window.spa.setup.isComplete().then(setReady); }, []);
@@ -265,10 +268,12 @@ export default function App() {
   const paletteActions = [
     ...NAV.map(n => ({ id: `nav-${n.view}`, label: `Go to ${n.label}`, sub: `Press ${n.shortcut}`, icon: n.icon, action: () => setView(n.view) })),
     { id: "gen-key", label: "Generate Signing Key", sub: "Create a new ECDSA key pair", icon: "&#128273;", action: () => setView("keys") },
-    { id: "add-gate", label: "Add Action Gate", sub: "Configure authorization gate", icon: "&#128737;", action: () => setView("gates") },
-    { id: "view-audit", label: "View Audit Log", sub: "Check security events", icon: "&#128203;", action: () => setView("audit") },
+    { id: "add-gate", label: "Add Action Gate", sub: "Configure authorization gate", icon: "&#128737;", action: () => setView("authorization") },
+    { id: "view-audit", label: "View Audit Log", sub: "Check security events", icon: "&#128203;", action: () => setView("authorization") },
     { id: "cfg-adapters", label: "Configure Messaging", sub: "Set up messaging adapters", icon: "&#9673;", action: () => navTo("settings", "adapters") },
     { id: "cfg-llm", label: "Configure LLM", sub: "Set up AI providers & models", icon: "&#129302;", action: () => navTo("settings", "llm") },
+    { id: "open-settings", label: "Open Settings", sub: "Configuration & preferences", icon: "&#9881;", action: () => setSettingsOpen(true) },
+    { id: "open-skills", label: "Browse Skills", sub: "Community skill marketplace", icon: "&#129513;", action: () => setView("skills") },
     { id: "toggle-bridge", label: brOn ? "Stop Bridge" : "Start Bridge", sub: `Bridge is ${brOn ? "running" : "stopped"}`, icon: "&#9673;", action: () => brOn ? window.spa.bridge.stop() : window.spa.bridge.start() },
   ];
 
@@ -299,6 +304,10 @@ export default function App() {
           );
         })}
         <div style={{ flex: 1 }} />
+        <button onClick={() => setSettingsOpen(true)}
+          className="oc-tooltip" data-tip="Settings"
+          style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.border}`, background: settingsOpen ? C.accentSoft : "transparent", color: settingsOpen ? C.accent : C.muted, fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6, transition: "all .15s" }}
+          dangerouslySetInnerHTML={{ __html: "&#9881;" }} />
         <button onClick={() => setPaletteOpen(true)}
           style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, fontWeight: 600 }}>
           {isDarwin ? "\u2318K" : "^K"}
@@ -312,15 +321,13 @@ export default function App() {
 
       {/* ─── Content ─── */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column" as const, overflow: "hidden", paddingTop: isDarwin ? C.safePadTop - 10 : 0 }}>
-        {view === "dashboard" && <DashboardView onNav={navTo} gwOn={gwOn} brOn={brOn} keys={keys} />}
+        {view === "overview" && <DashboardView onNav={navTo} gwOn={gwOn} brOn={brOn} keys={keys} />}
         {view === "agents" && <AgentsView onNav={navTo} onOpenChat={(id: string) => { setChatAgent(id); setView("chat"); }} />}
         {view === "chat" && <ChatView msgs={msgs} input={input} setInput={setInput} auth={auth} setAuth={setAuth} keyId={keyId} keys={keys} onSend={send} hasLLM={hasLLM} onNav={navTo} agentId={chatAgent} agents={agents} onAgentChange={setChatAgent} />}
         {view === "keys" && <KeysView keys={keys} keyId={keyId} setKeyId={setKeyId} refresh={refreshKeys} />}
-        {view === "gates" && <GatesView />}
-        {view === "audit" && <AuditView />}
+        {view === "authorization" && <><GatesView /><AuditView /></>}
         {view === "skills" && <SkillsBrowser />}
         {view === "personality" && <GlobalPersonality />}
-        {view === "settings" && <SettingsView gwOn={gwOn} brOn={brOn} gwUrl={gwUrl} setGwUrl={setGwUrl} configKeys={cfgKeys} setConfigKeys={setCfgKeys} initialSub={settingsSub} />}
       </div>
 
       {/* ─── Overlays ─── */}
@@ -332,6 +339,21 @@ export default function App() {
         onDeny={() => setApproval(null)}
         onClose={() => setApproval(null)}
       />
+
+      {/* ─── Settings Modal Overlay ─── */}
+      {settingsOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.55)", animation: "fadeIn .15s ease" }} onClick={() => setSettingsOpen(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ width: "85vw", maxWidth: 860, maxHeight: "85vh", overflowY: "auto" as const, ...glass(1), padding: 0, animation: "scaleIn .2s ease", display: "flex", flexDirection: "column" as const }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 24px 0" }}>
+              <span style={{ fontSize: 16, fontWeight: 700 }}>Settings</span>
+              <button onClick={() => setSettingsOpen(false)} style={{ background: "none", border: "none", color: C.dim, fontSize: 20, lineHeight: 1 }}>&times;</button>
+            </div>
+            <div style={{ flex: 1, overflow: "auto" }}>
+              <SettingsView gwOn={gwOn} brOn={brOn} gwUrl={gwUrl} setGwUrl={setGwUrl} configKeys={cfgKeys} setConfigKeys={setCfgKeys} initialSub={settingsSub} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

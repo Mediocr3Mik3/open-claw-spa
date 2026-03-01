@@ -116,7 +116,7 @@ function AgentSelector({ agents, agentId, onChange }: { agents: AgentOption[]; a
 
 export default function ChatView({ msgs, input, setInput, auth, setAuth, keyId, keys, onSend, hasLLM, onNav, agentId, agents, onAgentChange }: {
   msgs: Message[]; input: string; setInput: (v: string) => void; auth: string; setAuth: (v: string) => void;
-  keyId: string | null; keys: KeyInfo[]; onSend: () => void; hasLLM: boolean; onNav: (v: View, sub?: string) => void;
+  keyId: string | null; keys: KeyInfo[]; onSend: () => void; hasLLM: boolean; onNav: (v: View | "settings", sub?: string) => void;
   agentId?: string | null; agents?: AgentOption[]; onAgentChange?: (id: string | null) => void;
 }) {
   const end = useRef<HTMLDivElement>(null);
