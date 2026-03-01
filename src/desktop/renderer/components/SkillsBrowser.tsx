@@ -138,6 +138,24 @@ function SkillDetailModal({ skill, open, onClose, isInstalled, onInstall, onRemo
 
 // ─── Main Skills Browser ─────────────────────────────────────────────────
 
+type SortMode = "popular" | "newest" | "top_rated" | "trust";
+
+function VoteButtons({ skill, votes, onVote }: { skill: SkillData; votes: Record<string, 1 | -1>; onVote: (id: string, v: 1 | -1) => void }) {
+  const v = votes[skill.id];
+  return (
+    <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+      <button onClick={e => { e.stopPropagation(); onVote(skill.id, 1); }}
+        style={{ background: v === 1 ? C.okSoft : "transparent", border: `1px solid ${v === 1 ? C.ok : C.border}`, borderRadius: 4, padding: "2px 6px", fontSize: 10, color: v === 1 ? C.ok : C.muted, cursor: "pointer", transition: "all .12s" }}>
+        &#9650; {skill.trust.review_count > 0 ? Math.round(skill.trust.average_rating * skill.trust.review_count * 0.6) : 0}
+      </button>
+      <button onClick={e => { e.stopPropagation(); onVote(skill.id, -1); }}
+        style={{ background: v === -1 ? C.errSoft : "transparent", border: `1px solid ${v === -1 ? C.err : C.border}`, borderRadius: 4, padding: "2px 6px", fontSize: 10, color: v === -1 ? C.err : C.muted, cursor: "pointer", transition: "all .12s" }}>
+        &#9660;
+      </button>
+    </div>
+  );
+}
+
 export default function SkillsBrowser() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
@@ -145,6 +163,9 @@ export default function SkillsBrowser() {
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<SkillData | null>(null);
+  const [sort, setSort] = useState<SortMode>("popular");
+  const [votes, setVotes] = useState<Record<string, 1 | -1>>({});
+  const [showInstalled, setShowInstalled] = useState(false);
 
   useEffect(() => {
     loadSkills();
@@ -181,10 +202,20 @@ export default function SkillsBrowser() {
     loadInstalled();
   };
 
+  const onVote = (id: string, v: 1 | -1) => {
+    setVotes(p => ({ ...p, [id]: p[id] === v ? undefined as any : v }));
+  };
+
   const filtered = skills.filter(s => {
     if (search && !s.name.toLowerCase().includes(search.toLowerCase()) && !s.summary.toLowerCase().includes(search.toLowerCase())) return false;
     if (category !== "all" && s.category !== category) return false;
+    if (showInstalled && !installedIds.has(s.id)) return false;
     return true;
+  }).sort((a, b) => {
+    if (sort === "popular") return b.trust.install_count - a.trust.install_count;
+    if (sort === "top_rated") return b.trust.average_rating - a.trust.average_rating;
+    if (sort === "trust") return b.trust.trust_score - a.trust.trust_score;
+    return 0; // newest: default API order
   });
 
   return (
@@ -193,6 +224,17 @@ export default function SkillsBrowser() {
       <div style={{ width: 200, borderRight: `1px solid ${C.border}`, padding: "14px 14px", background: C.surface, flexShrink: 0, display: "flex", flexDirection: "column" as const }}>
         <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Skills</h2>
         <Input value={search} onChange={setSearch} placeholder="Search skills..." style={{ fontSize: 11, padding: "7px 10px", marginBottom: 14 }} />
+
+        <Sec>Sort By</Sec>
+        <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 4, marginBottom: 14 }}>
+          {([{ id: "popular", label: "Popular" }, { id: "newest", label: "Newest" }, { id: "top_rated", label: "Top Rated" }, { id: "trust", label: "Trust" }] as const).map(s => (
+            <button key={s.id} onClick={() => setSort(s.id)} style={{
+              padding: "4px 8px", borderRadius: C.rx, border: sort === s.id ? `1px solid ${C.borderAccent}` : `1px solid ${C.border}`,
+              background: sort === s.id ? C.accentSoft : "transparent", color: sort === s.id ? C.accent : C.muted,
+              fontSize: 9, fontWeight: 600, transition: "all .1s",
+            }}>{s.label}</button>
+          ))}
+        </div>
 
         <Sec>Categories</Sec>
         <div style={{ display: "flex", flexDirection: "column" as const, gap: 2 }}>
@@ -208,10 +250,10 @@ export default function SkillsBrowser() {
 
         <div style={{ flex: 1 }} />
 
-        <div style={{ ...glass(0), padding: 12, borderRadius: C.rs }}>
-          <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>Installed</div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>{installedIds.size}</div>
-        </div>
+        <button onClick={() => setShowInstalled(!showInstalled)} style={{ ...glass(showInstalled ? 1 : 0), padding: 12, borderRadius: C.rs, border: showInstalled ? `1px solid ${C.borderAccent}` : `1px solid ${C.border}`, width: "100%", textAlign: "left" as const, cursor: "pointer", transition: "all .12s" }}>
+          <div style={{ fontSize: 10, color: showInstalled ? C.accent : C.muted, marginBottom: 4 }}>Installed {showInstalled ? "(filtering)" : ""}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: showInstalled ? C.accent : C.text }}>{installedIds.size}</div>
+        </button>
       </div>
 
       {/* Main content */}
@@ -249,9 +291,15 @@ export default function SkillsBrowser() {
                     {s.summary}
                   </p>
 
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
                     <TrustBadge tier={s.trust.tier} score={s.trust.trust_score} />
+                    {s.trust.code_audited && <Pill bg={C.okSoft} color={C.ok}>Vetted</Pill>}
+                    <span style={{ flex: 1 }} />
+                    <VoteButtons skill={s} votes={votes} onVote={onVote} />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
                     <span style={{ fontSize: 9, color: C.muted }}>{s.trust.install_count.toLocaleString()} installs</span>
+                    <span style={{ fontSize: 9, color: C.muted }}>{s.license}</span>
                   </div>
                 </div>
               );
