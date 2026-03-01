@@ -17,9 +17,11 @@ import { app, BrowserWindow, ipcMain, safeStorage, Tray, Menu, nativeImage, shel
 import * as path from "path";
 import * as fs from "fs";
 import * as crypto from "crypto";
-import { fork, ChildProcess } from "child_process";
-import {
-  generateKeyPair,
+import { fork, ChildProcess, execSync } from "child_process";
+import WebSocket from "ws";
+import { AuditLog } from "../../enterprise/audit.js";
+import { EncryptedConfig } from "../../enterprise/encrypted-config.js";
+import { generateKeyPair,
   registerPublicKey,
   listKeys,
   revokeKey,
@@ -30,42 +32,50 @@ import {
 } from "../../crypto/envelope.js";
 import type { AuthLevel, SigningAlgorithm } from "../../types.js";
 import { profileHardware, quickProfile } from "../../providers/hardware-profiler.js";
-import { generateRecommendations } from "../../providers/model-database.js";
+import { generateRecommendations, ALL_MODELS, LOCAL_MODELS, API_MODELS, findModel, findModelsByProvider, findModelsByStrength, estimateCost } from "../../providers/model-database.js";
 import { activeProvider } from "../../providers/active-provider.js";
 import { APIKeyVault, type VaultBackend } from "../../providers/vault.js";
 import { SpendTracker } from "../../providers/spend-tracker.js";
 import { PROVIDER_REGISTRY, getProviderDef } from "../../providers/registry.js";
 import type { BudgetConfig } from "../../providers/types.js";
+import { ActionGateRegistry } from "../../gates/registry.js";
+import { KeyRotationManager } from "../../enterprise/key-rotation.js";
+import { RateLimiter } from "../../enterprise/rate-limiter.js";
+import { OrgManager } from "../../enterprise/org.js";
 
 // ─── Paths ───────────────────────────────────────────────────────────────
+// Initialized inside app.whenReady() — app.getPath() requires Electron ready.
+let SPA_DIR = "";
+let KEY_REGISTRY = "";
+let ENCRYPTED_KEYS_PATH = "";
+let CONFIG_PATH = "";
+let AUDIT_DB_PATH = "";
+let ORG_DB_PATH = "";
+let SETUP_FLAG = "";
 
-const SPA_DIR = path.join(app.getPath("userData"), "spa");
-const KEY_REGISTRY = path.join(SPA_DIR, "keys.json");
-const ENCRYPTED_KEYS_PATH = path.join(SPA_DIR, "encrypted_keys.bin");
-const CONFIG_PATH = path.join(SPA_DIR, "config.encrypted.json");
-const AUDIT_DB_PATH = path.join(SPA_DIR, "audit.db");
-const ORG_DB_PATH = path.join(SPA_DIR, "org.db");
-const SETUP_FLAG = path.join(SPA_DIR, ".setup-complete");
-
-// Ensure SPA directory exists
-if (!fs.existsSync(SPA_DIR)) fs.mkdirSync(SPA_DIR, { recursive: true });
-
-// ─── Lazy-loaded enterprise modules ──────────────────────────────────────
-// We lazy-load these so the app starts fast even if SQLite isn't needed yet.
-
-let _audit: import("../../enterprise/audit.js").AuditLog | null = null;
-function getAudit(): import("../../enterprise/audit.js").AuditLog {
-  if (!_audit) {
-    const { AuditLog } = require("../../enterprise/audit.js");
-    _audit = new AuditLog(AUDIT_DB_PATH);
-  }
-  return _audit!;
+function initPaths(): void {
+  SPA_DIR = path.join(app.getPath("userData"), "spa");
+  KEY_REGISTRY = path.join(SPA_DIR, "keys.json");
+  ENCRYPTED_KEYS_PATH = path.join(SPA_DIR, "encrypted_keys.bin");
+  CONFIG_PATH = path.join(SPA_DIR, "config.encrypted.json");
+  AUDIT_DB_PATH = path.join(SPA_DIR, "audit.db");
+  ORG_DB_PATH = path.join(SPA_DIR, "org.db");
+  SETUP_FLAG = path.join(SPA_DIR, ".setup-complete");
+  if (!fs.existsSync(SPA_DIR)) fs.mkdirSync(SPA_DIR, { recursive: true });
 }
 
-let _encConfig: import("../../enterprise/encrypted-config.js").EncryptedConfig | null = null;
-function getConfig(): import("../../enterprise/encrypted-config.js").EncryptedConfig {
+// ─── Lazy-initialized enterprise modules ─────────────────────────────────
+// Instances created on first call (after initPaths() has been called).
+
+let _audit: AuditLog | null = null;
+function getAudit(): AuditLog {
+  if (!_audit) _audit = new AuditLog(AUDIT_DB_PATH);
+  return _audit;
+}
+
+let _encConfig: EncryptedConfig | null = null;
+function getConfig(): EncryptedConfig {
   if (!_encConfig) {
-    const { EncryptedConfig } = require("../../enterprise/encrypted-config.js");
     let masterKey: Buffer | undefined;
     if (safeStorage.isEncryptionAvailable()) {
       // Derive master key from a secret stored in OS keychain
@@ -82,7 +92,50 @@ function getConfig(): import("../../enterprise/encrypted-config.js").EncryptedCo
     }
     _encConfig = new EncryptedConfig({ config_path: CONFIG_PATH, master_key: masterKey });
   }
-  return _encConfig!;
+  return _encConfig;
+}
+
+// ─── Lazy-initialized new enterprise modules ─────────────────────────────
+
+let _gateRegistry: ActionGateRegistry | null = null;
+function getGateRegistry(): ActionGateRegistry {
+  if (!_gateRegistry) {
+    const gatesPath = path.join(SPA_DIR, "gates.json");
+    _gateRegistry = ActionGateRegistry.fromFile(gatesPath);
+  }
+  return _gateRegistry;
+}
+
+let _keyRotation: KeyRotationManager | null = null;
+function getKeyRotation(): KeyRotationManager {
+  if (!_keyRotation) {
+    _keyRotation = new KeyRotationManager(KEY_REGISTRY);
+  }
+  return _keyRotation;
+}
+
+let _rateLimiter: RateLimiter | null = null;
+function getRateLimiter(): RateLimiter {
+  if (!_rateLimiter) {
+    _rateLimiter = new RateLimiter();
+    _rateLimiter.onAlert((alert) => {
+      getAudit().log({
+        event_type: "intrusion_alert",
+        detail: `${alert.type}: ${alert.detail}`,
+        metadata: { source_id: alert.source_id },
+      });
+      mainWindow?.webContents.send("intrusion-alert", alert);
+    });
+  }
+  return _rateLimiter;
+}
+
+let _orgManager: OrgManager | null = null;
+function getOrgManager(): OrgManager {
+  if (!_orgManager) {
+    _orgManager = new OrgManager(ORG_DB_PATH);
+  }
+  return _orgManager;
 }
 
 // ─── Encrypted private key storage ───────────────────────────────────────
@@ -233,11 +286,33 @@ function createWindow(): void {
   });
 
   // Load the renderer
+  const rendererPath = path.join(__dirname, "..", "..", "..", "dist-renderer", "index.html");
+  console.log("[Main] __dirname:", __dirname);
+  console.log("[Main] Renderer path:", rendererPath);
+  console.log("[Main] Renderer exists:", fs.existsSync(rendererPath));
+
+  // Capture renderer console messages in main process output
+  mainWindow.webContents.on("console-message", (_ev, level, message, line, sourceId) => {
+    console.log(`[Renderer:${level}] ${message} (${sourceId}:${line})`);
+  });
+
+  // Capture load failures
+  mainWindow.webContents.on("did-fail-load", (_ev, errorCode, errorDescription, validatedURL) => {
+    console.error(`[Main] LOAD FAILED: ${errorCode} ${errorDescription} URL: ${validatedURL}`);
+  });
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    console.log("[Main] Renderer finished loading");
+  });
+
   if (process.env["ELECTRON_DEV"]) {
     mainWindow.loadURL("http://localhost:5173");
   } else {
-    mainWindow.loadFile(path.join(__dirname, "..", "..", "dist-renderer", "index.html"));
+    mainWindow.loadFile(rendererPath);
   }
+
+  // Open DevTools for debugging (remove in production)
+  mainWindow.webContents.openDevTools({ mode: "detach" });
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -294,7 +369,6 @@ ipcMain.handle("setup:complete", async () => {
 
 ipcMain.handle("setup:check-node", async () => {
   try {
-    const { execSync } = require("child_process");
     const version = execSync("node --version", { encoding: "utf-8" }).trim();
     return { installed: true, version };
   } catch {
@@ -517,32 +591,8 @@ const vaultBackend: VaultBackend = {
 };
 const vault = new APIKeyVault(vaultBackend);
 
-// Spend tracker: persists to SPA_DIR/spend-log.ndjson
-const spendTracker = new SpendTracker({
-  data_dir: SPA_DIR,
-  onBudgetUpdate: (totalUsd) => {
-    activeProvider.updateSpend(totalUsd);
-    mainWindow?.webContents.send("spend-update", {
-      total_usd: totalUsd,
-      budget_percent: spendTracker.getBudgetUsagePercent(),
-    });
-  },
-});
-
-// Wire vault into the active provider manager
-activeProvider.setVault({
-  get: (key: string) => vault.getKey(key),
-});
-
-// Forward provider events to the renderer
-activeProvider.subscribe((event) => {
-  mainWindow?.webContents.send("provider-event", event);
-  getAudit().log({
-    event_type: event.type === "provider_switched" ? "config_changed" : "app_started",
-    detail: event.detail,
-    metadata: { provider_id: event.provider_id, model_id: event.model_id },
-  });
-});
+// Spend tracker: initialized in app.whenReady() after initPaths() sets SPA_DIR
+let spendTracker!: SpendTracker;
 
 // ─── IPC Handlers: Hardware & Recommendations ───────────────────────────
 
@@ -705,9 +755,352 @@ ipcMain.handle("spend:recent", async (_event, limit?: number) => {
   return spendTracker.getRecent(limit);
 });
 
+// ─── IPC Handlers: Action Gate Registry ──────────────────────────────────
+
+ipcMain.handle("gates:list", async (_event, filterLevel?: AuthLevel) => {
+  return getGateRegistry().list(filterLevel);
+});
+
+ipcMain.handle("gates:check", async (_event, tool: string, grantedLevel: AuthLevel) => {
+  return getGateRegistry().isAllowed(tool, grantedLevel);
+});
+
+ipcMain.handle("gates:required-level", async (_event, tool: string) => {
+  return getGateRegistry().getRequiredLevel(tool);
+});
+
+ipcMain.handle("gates:partition", async (_event, tools: string[], grantedLevel: AuthLevel) => {
+  return getGateRegistry().partition(tools, grantedLevel);
+});
+
+ipcMain.handle("gates:set", async (_event, tool: string, requiredLevel: AuthLevel, description: string) => {
+  getGateRegistry().set(tool, requiredLevel, description);
+  getGateRegistry().save(path.join(SPA_DIR, "gates.json"));
+  getAudit().log({ event_type: "config_changed", detail: `Gate set: ${tool} → ${requiredLevel}` });
+  return true;
+});
+
+ipcMain.handle("gates:remove", async (_event, tool: string) => {
+  const result = getGateRegistry().remove(tool);
+  if (result) {
+    getGateRegistry().save(path.join(SPA_DIR, "gates.json"));
+    getAudit().log({ event_type: "config_changed", detail: `Gate removed: ${tool}` });
+  }
+  return result;
+});
+
+// ─── IPC Handlers: Key Rotation ──────────────────────────────────────────
+
+ipcMain.handle("key-rotation:rotate", async (_event, oldKeyId: string, opts?: {
+  grace_period_hours?: number;
+  label?: string;
+  algorithm?: SigningAlgorithm;
+}) => {
+  const result = getKeyRotation().rotate(oldKeyId, opts ?? {});
+  // Store the new private key securely
+  storePrivateKey(result.new_key_id, result.new_private_key_pem);
+  getAudit().log({
+    event_type: "key_generated",
+    key_id: result.new_key_id,
+    detail: `Key rotated: ${oldKeyId} → ${result.new_key_id} (grace until ${result.grace_period_until})`,
+  });
+  return {
+    old_key_id: result.old_key_id,
+    new_key_id: result.new_key_id,
+    new_fingerprint: result.new_fingerprint,
+    grace_period_until: result.grace_period_until,
+    algorithm: result.algorithm,
+  };
+});
+
+ipcMain.handle("key-rotation:chain", async (_event, keyId: string) => {
+  return getKeyRotation().getChain(keyId);
+});
+
+ipcMain.handle("key-rotation:pending", async () => {
+  return getKeyRotation().pendingRotations();
+});
+
+ipcMain.handle("key-rotation:finalize", async () => {
+  const revoked = getKeyRotation().finalizeExpired();
+  for (const keyId of revoked) {
+    getAudit().log({ event_type: "key_revoked", key_id: keyId, detail: "Revoked after rotation grace period expired" });
+  }
+  return revoked;
+});
+
+// ─── IPC Handlers: Rate Limiter ──────────────────────────────────────────
+
+ipcMain.handle("rate-limiter:check", async (_event, sourceId: string) => {
+  return getRateLimiter().check(sourceId);
+});
+
+ipcMain.handle("rate-limiter:record-failure", async (_event, sourceId: string) => {
+  getRateLimiter().recordFailure(sourceId);
+  return true;
+});
+
+// ─── IPC Handlers: Organization Management ──────────────────────────────
+
+ipcMain.handle("org:create", async (_event, name: string) => {
+  const org = getOrgManager().createOrg(name);
+  getAudit().log({ event_type: "config_changed", detail: `Organization created: ${name} (${org.org_id})` });
+  return org;
+});
+
+ipcMain.handle("org:get", async (_event, orgId: string) => {
+  return getOrgManager().getOrg(orgId);
+});
+
+ipcMain.handle("org:list", async () => {
+  return getOrgManager().listOrgs();
+});
+
+ipcMain.handle("org:add-member", async (_event, opts: {
+  org_id: string;
+  user_id: string;
+  display_name: string;
+  role: string;
+  spa_key_id?: string;
+}) => {
+  const member = getOrgManager().addMember(
+    opts.org_id, opts.user_id, opts.display_name, opts.role as any, opts.spa_key_id
+  );
+  getAudit().log({ event_type: "config_changed", detail: `Member added: ${opts.display_name} as ${opts.role} in ${opts.org_id}` });
+  return member;
+});
+
+ipcMain.handle("org:list-members", async (_event, orgId: string) => {
+  return getOrgManager().listMembers(orgId);
+});
+
+ipcMain.handle("org:update-role", async (_event, memberId: string, newRole: string) => {
+  const result = getOrgManager().updateMemberRole(memberId, newRole as any);
+  if (result) {
+    getAudit().log({ event_type: "config_changed", detail: `Member ${memberId} role changed to ${newRole}` });
+  }
+  return result;
+});
+
+ipcMain.handle("org:remove-member", async (_event, memberId: string) => {
+  const result = getOrgManager().deactivateMember(memberId);
+  if (result) {
+    getAudit().log({ event_type: "config_changed", detail: `Member ${memberId} deactivated` });
+  }
+  return result;
+});
+
+ipcMain.handle("org:bind-key", async (_event, memberId: string, spaKeyId: string) => {
+  return getOrgManager().bindKeyToMember(memberId, spaKeyId);
+});
+
+// ─── IPC Handlers: Model Database ────────────────────────────────────────
+
+ipcMain.handle("models:all", async () => {
+  return ALL_MODELS.map(m => ({
+    id: m.id, label: m.label, provider_id: m.provider_id,
+    parameter_count_b: m.parameter_count_b, context_window: m.context_window,
+    strengths: m.strengths, quantizations: m.quantizations,
+    estimated_cost_per_1k_input: m.estimated_cost_per_1k_input,
+    estimated_cost_per_1k_output: m.estimated_cost_per_1k_output,
+  }));
+});
+
+ipcMain.handle("models:local", async () => {
+  return LOCAL_MODELS.map(m => ({ id: m.id, label: m.label, provider_id: m.provider_id, context_window: m.context_window, strengths: m.strengths }));
+});
+
+ipcMain.handle("models:api", async () => {
+  return API_MODELS.map(m => ({ id: m.id, label: m.label, provider_id: m.provider_id, context_window: m.context_window, strengths: m.strengths }));
+});
+
+ipcMain.handle("models:find", async (_event, modelId: string) => {
+  return findModel(modelId) ?? null;
+});
+
+ipcMain.handle("models:by-provider", async (_event, providerId: string) => {
+  return findModelsByProvider(providerId);
+});
+
+ipcMain.handle("models:by-strength", async (_event, strength: string) => {
+  return findModelsByStrength(strength as any);
+});
+
+ipcMain.handle("models:estimate-cost", async (_event, modelId: string, inputTokens: number, outputTokens: number) => {
+  const model = findModel(modelId);
+  if (!model) return null;
+  return estimateCost(model, inputTokens, outputTokens);
+});
+
+// ─── IPC Handlers: Runtime Management ────────────────────────────────────
+
+const RUNTIME_DOWNLOAD_URLS: Record<string, Record<string, string>> = {
+  ollama: {
+    win32: "https://ollama.com/download/OllamaSetup.exe",
+    darwin: "https://ollama.com/download/Ollama-darwin.zip",
+    linux: "https://ollama.com/install.sh",
+  },
+  "llama.cpp": {
+    win32: "https://github.com/ggerganov/llama.cpp/releases",
+    darwin: "https://github.com/ggerganov/llama.cpp/releases",
+    linux: "https://github.com/ggerganov/llama.cpp/releases",
+  },
+  "lm-studio": {
+    win32: "https://lmstudio.ai/",
+    darwin: "https://lmstudio.ai/",
+    linux: "https://lmstudio.ai/",
+  },
+};
+
+ipcMain.handle("runtime:detect", async () => {
+  const profile = profileHardware();
+  return profile.runtimes;
+});
+
+ipcMain.handle("runtime:download-url", async (_event, runtimeName: string) => {
+  const platform = process.platform;
+  const urls = RUNTIME_DOWNLOAD_URLS[runtimeName];
+  return urls?.[platform] ?? null;
+});
+
+ipcMain.handle("runtime:open-download", async (_event, runtimeName: string) => {
+  const platform = process.platform;
+  const url = RUNTIME_DOWNLOAD_URLS[runtimeName]?.[platform];
+  if (url) {
+    await shell.openExternal(url);
+    return { opened: true, url };
+  }
+  return { opened: false, error: `No download URL for ${runtimeName} on ${platform}` };
+});
+
+ipcMain.handle("runtime:start", async (_event, runtimeName: string) => {
+  try {
+    if (runtimeName === "ollama") {
+      if (process.platform === "win32") {
+        execSync("start /B ollama serve", { encoding: "utf-8", windowsHide: true });
+      } else {
+        execSync("ollama serve &", { encoding: "utf-8" });
+      }
+      return { started: true };
+    }
+    return { started: false, error: `Auto-start not supported for ${runtimeName}. Please start it manually.` };
+  } catch (err) {
+    return { started: false, error: String(err) };
+  }
+});
+
+ipcMain.handle("runtime:stop", async (_event, runtimeName: string) => {
+  try {
+    if (runtimeName === "ollama") {
+      if (process.platform === "win32") {
+        execSync("taskkill /F /IM ollama.exe", { encoding: "utf-8" });
+      } else {
+        execSync("pkill ollama", { encoding: "utf-8" });
+      }
+      return { stopped: true };
+    }
+    return { stopped: false, error: `Auto-stop not supported for ${runtimeName}` };
+  } catch (err) {
+    return { stopped: false, error: String(err) };
+  }
+});
+
+ipcMain.handle("runtime:health", async (_event, endpoint: string) => {
+  try {
+    const http = await import("http");
+    return new Promise((resolve) => {
+      const req = http.get(endpoint, { timeout: 3000 }, (res) => {
+        resolve({ available: res.statusCode === 200, status: res.statusCode });
+      });
+      req.on("error", () => resolve({ available: false }));
+      req.on("timeout", () => { req.destroy(); resolve({ available: false }); });
+    });
+  } catch {
+    return { available: false };
+  }
+});
+
+// ─── IPC Handlers: OpenClaw Auto-Setup ───────────────────────────────────
+
+ipcMain.handle("setup:auto-detect", async () => {
+  const profile = profileHardware();
+  const recommendations = generateRecommendations(profile);
+  const runtimes = profile.runtimes;
+  const configuredProviders = vault.getConfiguredProviders();
+
+  return {
+    hardware: {
+      cpu: profile.cpu.model,
+      ram_gb: profile.ram.total_gb,
+      gpus: profile.gpus.map(g => ({ name: g.name, vram_gb: g.vram_gb, vendor: g.vendor })),
+    },
+    runtimes,
+    configured_providers: configuredProviders,
+    recommendations: recommendations.recommendations.slice(0, 5).map(r => ({
+      model: r.model.label,
+      tier: r.tier,
+      reason: r.reason,
+      fits_in_memory: r.fits_in_memory,
+    })),
+    summary: recommendations.summary,
+    warnings: recommendations.warnings,
+    suggested_runtime: runtimes.length > 0 ? runtimes[0].name : "ollama",
+    needs_runtime_install: runtimes.length === 0,
+  };
+});
+
+ipcMain.handle("setup:install-runtime", async (_event, runtimeName: string) => {
+  const url = RUNTIME_DOWNLOAD_URLS[runtimeName]?.[process.platform];
+  if (!url) return { success: false, error: `No installer for ${runtimeName} on ${process.platform}` };
+
+  if (process.platform === "linux" && runtimeName === "ollama") {
+    // On Linux, Ollama can be installed via curl script
+    try {
+      execSync("curl -fsSL https://ollama.com/install.sh | sh", { encoding: "utf-8", timeout: 120_000 });
+      return { success: true, method: "script" };
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
+  }
+
+  // For Windows/macOS, open the download page
+  await shell.openExternal(url);
+  return { success: true, method: "browser", url };
+});
+
 // ─── App Lifecycle ───────────────────────────────────────────────────────
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Initialize paths first (requires Electron app to be ready)
+  initPaths();
+
+  // Initialize spend tracker now that SPA_DIR is known
+  spendTracker = new SpendTracker({
+    data_dir: SPA_DIR,
+    onBudgetUpdate: (totalUsd) => {
+      activeProvider.updateSpend(totalUsd);
+      mainWindow?.webContents.send("spend-update", {
+        total_usd: totalUsd,
+        budget_percent: spendTracker.getBudgetUsagePercent(),
+      });
+    },
+  });
+
+  // Wire vault into the active provider manager
+  activeProvider.setVault({
+    get: (key: string) => vault.getKey(key),
+  });
+
+  // Forward provider events to the renderer
+  activeProvider.subscribe((event) => {
+    mainWindow?.webContents.send("provider-event", event);
+    getAudit().log({
+      event_type: event.type === "provider_switched" ? "config_changed" : "app_started",
+      detail: event.detail,
+      metadata: { provider_id: event.provider_id, model_id: event.model_id },
+    });
+  });
+
   createWindow();
 
   // System tray

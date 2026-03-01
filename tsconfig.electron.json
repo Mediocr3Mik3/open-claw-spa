@@ -30,7 +30,8 @@
     "src/messaging/identity.ts",
     "src/messaging/server.ts",
     "src/messaging/adapters/**/*.ts",
-    "src/middleware/**/*.ts"
+    "src/middleware/**/*.ts",
+    "src/providers/**/*.ts"
   ],
   "exclude": [
     "node_modules",

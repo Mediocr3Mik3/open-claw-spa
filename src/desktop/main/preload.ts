@@ -124,6 +124,77 @@ const api = {
       ipcRenderer.on("spend-update", (_event, data) => callback(data));
     },
   },
+
+  // ─── Action Gate Registry ──────────────────────────────────────────
+  gates: {
+    list: (filterLevel?: string) => ipcRenderer.invoke("gates:list", filterLevel),
+    check: (tool: string, grantedLevel: string) => ipcRenderer.invoke("gates:check", tool, grantedLevel),
+    requiredLevel: (tool: string) => ipcRenderer.invoke("gates:required-level", tool),
+    partition: (tools: string[], grantedLevel: string) => ipcRenderer.invoke("gates:partition", tools, grantedLevel),
+    set: (tool: string, requiredLevel: string, description: string) => ipcRenderer.invoke("gates:set", tool, requiredLevel, description),
+    remove: (tool: string) => ipcRenderer.invoke("gates:remove", tool),
+  },
+
+  // ─── Key Rotation ─────────────────────────────────────────────────
+  keyRotation: {
+    rotate: (oldKeyId: string, opts?: { grace_period_hours?: number; label?: string; algorithm?: string }) =>
+      ipcRenderer.invoke("key-rotation:rotate", oldKeyId, opts),
+    chain: (keyId: string) => ipcRenderer.invoke("key-rotation:chain", keyId),
+    pending: () => ipcRenderer.invoke("key-rotation:pending"),
+    finalize: () => ipcRenderer.invoke("key-rotation:finalize"),
+  },
+
+  // ─── Rate Limiter ─────────────────────────────────────────────────
+  rateLimiter: {
+    check: (sourceId: string) => ipcRenderer.invoke("rate-limiter:check", sourceId),
+    recordFailure: (sourceId: string) => ipcRenderer.invoke("rate-limiter:record-failure", sourceId),
+  },
+
+  // ─── Organization Management ──────────────────────────────────────
+  org: {
+    create: (name: string) => ipcRenderer.invoke("org:create", name),
+    get: (orgId: string) => ipcRenderer.invoke("org:get", orgId),
+    list: () => ipcRenderer.invoke("org:list"),
+    addMember: (opts: { org_id: string; user_id: string; display_name: string; role: string; spa_key_id?: string }) =>
+      ipcRenderer.invoke("org:add-member", opts),
+    listMembers: (orgId: string) => ipcRenderer.invoke("org:list-members", orgId),
+    updateRole: (memberId: string, newRole: string) => ipcRenderer.invoke("org:update-role", memberId, newRole),
+    removeMember: (memberId: string) => ipcRenderer.invoke("org:remove-member", memberId),
+    bindKey: (memberId: string, spaKeyId: string) => ipcRenderer.invoke("org:bind-key", memberId, spaKeyId),
+  },
+
+  // ─── Model Database ───────────────────────────────────────────────
+  models: {
+    all: () => ipcRenderer.invoke("models:all"),
+    local: () => ipcRenderer.invoke("models:local"),
+    api: () => ipcRenderer.invoke("models:api"),
+    find: (modelId: string) => ipcRenderer.invoke("models:find", modelId),
+    byProvider: (providerId: string) => ipcRenderer.invoke("models:by-provider", providerId),
+    byStrength: (strength: string) => ipcRenderer.invoke("models:by-strength", strength),
+    estimateCost: (modelId: string, inputTokens: number, outputTokens: number) =>
+      ipcRenderer.invoke("models:estimate-cost", modelId, inputTokens, outputTokens),
+  },
+
+  // ─── Runtime Management ───────────────────────────────────────────
+  runtime: {
+    detect: () => ipcRenderer.invoke("runtime:detect"),
+    downloadUrl: (runtimeName: string) => ipcRenderer.invoke("runtime:download-url", runtimeName),
+    openDownload: (runtimeName: string) => ipcRenderer.invoke("runtime:open-download", runtimeName),
+    start: (runtimeName: string) => ipcRenderer.invoke("runtime:start", runtimeName),
+    stop: (runtimeName: string) => ipcRenderer.invoke("runtime:stop", runtimeName),
+    health: (endpoint: string) => ipcRenderer.invoke("runtime:health", endpoint),
+  },
+
+  // ─── OpenClaw Auto-Setup ──────────────────────────────────────────
+  autoSetup: {
+    detect: () => ipcRenderer.invoke("setup:auto-detect"),
+    installRuntime: (runtimeName: string) => ipcRenderer.invoke("setup:install-runtime", runtimeName),
+  },
+
+  // ─── Security Events ──────────────────────────────────────────────
+  onIntrusionAlert: (callback: (alert: unknown) => void) => {
+    ipcRenderer.on("intrusion-alert", (_event, alert) => callback(alert));
+  },
 };
 
 export type SPADesktopAPI = typeof api;
