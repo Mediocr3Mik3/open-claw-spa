@@ -78,7 +78,7 @@ function ActivityChart({ stats }: { stats: Record<string, number> }) {
 
 // ─── Main Audit View ─────────────────────────────────────────────────────
 
-export default function AuditView() {
+export default function AuditView({ embedded }: { embedded?: boolean } = {}) {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [stats, setStats] = useState<Record<string, number>>({});
   const [chainOk, setChainOk] = useState<boolean | null>(null);
@@ -136,17 +136,25 @@ export default function AuditView() {
   const verifyRate = totalVerified + totalRejected > 0 ? Math.round((totalVerified / (totalVerified + totalRejected)) * 100) : 100;
 
   return (
-    <div style={{ padding: 28, overflowY: "auto" as const, flex: 1, animation: "fadeIn .2s ease" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Audit Log</h1>
-          <p style={{ fontSize: 13, color: C.dim }}>Security events, signature verification, and compliance trail.</p>
+    <div style={{ padding: embedded ? "0 28px 28px" : 28, overflowY: "auto" as const, flex: 1, animation: "fadeIn .2s ease" }}>
+      {!embedded && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Audit Log</h1>
+            <p style={{ fontSize: 13, color: C.dim }}>Security events, signature verification, and compliance trail.</p>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn v="g" onClick={doExport} disabled={exporting}>{exporting ? "Exporting..." : "Export NDJSON"}</Btn>
+            <Btn v="g" onClick={load}>Refresh</Btn>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+      )}
+      {embedded && (
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 18 }}>
           <Btn v="g" onClick={doExport} disabled={exporting}>{exporting ? "Exporting..." : "Export NDJSON"}</Btn>
           <Btn v="g" onClick={load}>Refresh</Btn>
         </div>
-      </div>
+      )}
 
       {/* Summary Row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, marginBottom: 22 }}>

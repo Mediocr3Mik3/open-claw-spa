@@ -32,8 +32,8 @@ export default function AuthorizationView() {
 
       {/* Content */}
       <div style={{ flex: 1, overflow: "auto" }}>
-        {tab === "gates" && <GatesView />}
-        {tab === "audit" && <AuditView />}
+        {tab === "gates" && <GatesView embedded />}
+        {tab === "audit" && <AuditView embedded />}
       </div>
     </div>
   );

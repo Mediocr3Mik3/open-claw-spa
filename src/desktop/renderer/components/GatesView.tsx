@@ -93,7 +93,7 @@ const PRESETS: Record<string, GateEntry[]> = {
 
 // ─── Main Gates View ─────────────────────────────────────────────────────
 
-export default function GatesView() {
+export default function GatesView({ embedded }: { embedded?: boolean } = {}) {
   const [gates, setGates] = useState<GateEntry[]>([]);
   const [editGate, setEditGate] = useState<GateEntry | null | undefined>(undefined);
   const [search, setSearch] = useState("");
@@ -129,17 +129,25 @@ export default function GatesView() {
   };
 
   return (
-    <div style={{ padding: 28, overflowY: "auto" as const, flex: 1, animation: "fadeIn .2s ease" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Action Gates</h1>
-          <p style={{ fontSize: 13, color: C.dim }}>Control which tools require signed authorization.</p>
+    <div style={{ padding: embedded ? "0 28px 28px" : 28, overflowY: "auto" as const, flex: 1, animation: "fadeIn .2s ease" }}>
+      {!embedded && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Action Gates</h1>
+            <p style={{ fontSize: 13, color: C.dim }}>Control which tools require signed authorization.</p>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn v="g" onClick={() => setPresetOpen(true)}>Presets</Btn>
+            <Btn onClick={() => setEditGate(null)}>+ Add Gate</Btn>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+      )}
+      {embedded && (
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 18 }}>
           <Btn v="g" onClick={() => setPresetOpen(true)}>Presets</Btn>
           <Btn onClick={() => setEditGate(null)}>+ Add Gate</Btn>
         </div>
-      </div>
+      )}
 
       {/* Summary Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 22 }}>
