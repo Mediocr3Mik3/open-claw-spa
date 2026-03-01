@@ -191,6 +191,51 @@ const api = {
     installRuntime: (runtimeName: string) => ipcRenderer.invoke("setup:install-runtime", runtimeName),
   },
 
+  // ─── Voice / Speech-to-Text ─────────────────────────────────────
+  voice: {
+    transcribe: (opts: { audio_base64: string; mime_type: string; options?: Record<string, unknown> }) =>
+      ipcRenderer.invoke("voice:transcribe", opts),
+    listProviders: () => ipcRenderer.invoke("voice:list-providers"),
+    setProvider: (providerId: string) => ipcRenderer.invoke("voice:set-provider", providerId),
+    getConfig: () => ipcRenderer.invoke("voice:get-config"),
+    setConfig: (config: Record<string, unknown>) => ipcRenderer.invoke("voice:set-config", config),
+    health: () => ipcRenderer.invoke("voice:health"),
+    onTranscription: (callback: (result: unknown) => void) => {
+      ipcRenderer.on("voice-transcription", (_event, result) => callback(result));
+    },
+  },
+
+  // ─── Skills ────────────────────────────────────────────────────────
+  skills: {
+    search: (params: Record<string, unknown>) => ipcRenderer.invoke("skills:search", params),
+    installed: () => ipcRenderer.invoke("skills:installed"),
+    install: (skillId: string) => ipcRenderer.invoke("skills:install", skillId),
+    remove: (skillId: string) => ipcRenderer.invoke("skills:remove", skillId),
+    enable: (skillId: string, agentId?: string) => ipcRenderer.invoke("skills:enable", skillId, agentId),
+    disable: (skillId: string, agentId?: string) => ipcRenderer.invoke("skills:disable", skillId, agentId),
+    getManifest: (skillId: string) => ipcRenderer.invoke("skills:manifest", skillId),
+    getTrust: (skillId: string) => ipcRenderer.invoke("skills:trust", skillId),
+    approveGate: (skillId: string, tool: string) => ipcRenderer.invoke("skills:approve-gate", skillId, tool),
+  },
+
+  // ─── Global Personality / Context ─────────────────────────────────
+  personality: {
+    get: () => ipcRenderer.invoke("personality:get"),
+    set: (data: { context: string; vision: string; enabled: boolean }) =>
+      ipcRenderer.invoke("personality:set", data),
+  },
+
+  // ─── Agent Learning ───────────────────────────────────────────────
+  learning: {
+    getSuggestions: (agentId: string) => ipcRenderer.invoke("learning:suggestions", agentId),
+    dismissSuggestion: (agentId: string, suggestionId: string) =>
+      ipcRenderer.invoke("learning:dismiss", agentId, suggestionId),
+    getInsights: (agentId: string) => ipcRenderer.invoke("learning:insights", agentId),
+    setEnabled: (agentId: string, enabled: boolean) =>
+      ipcRenderer.invoke("learning:set-enabled", agentId, enabled),
+    isEnabled: (agentId: string) => ipcRenderer.invoke("learning:is-enabled", agentId),
+  },
+
   // ─── Security Events ──────────────────────────────────────────────
   onIntrusionAlert: (callback: (alert: unknown) => void) => {
     ipcRenderer.on("intrusion-alert", (_event, alert) => callback(alert));

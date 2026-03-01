@@ -1,8 +1,28 @@
 # OpenClaw SPA — Signed Prompt Architecture
 
-Cryptographic authorization layer for [OpenClaw](https://github.com/openclaw) AI agents.
+Cryptographic authorization layer for [OpenClaw](https://github.com/openclaw) AI agents — now with **voice input**, **agent fleet management**, **community skills**, and a **design-forward desktop app**.
 
 SPA prevents prompt injection attacks by requiring **signed envelopes** for sensitive tool calls. Every gated action (file writes, shell commands, API calls, etc.) requires a cryptographically verified prompt signed by a registered key.
+
+---
+
+## Features at a Glance
+
+| Feature | Status | Description |
+|---|---|---|
+| **Signed Prompts** | Stable | ECDSA/RSA cryptographic signing for every prompt |
+| **Gate Registry** | Stable | Tool-level authorization with 3-tier auth levels |
+| **Messaging Bridge** | Stable | 17 platform adapters with SPA verification |
+| **Voice Pipeline** | New | Pluggable STT: Whisper.cpp local, OpenAI Whisper, WhisperFlo |
+| **Agent Fleet** | New | Create, manage, and chat with specialized agents |
+| **Agent Wizard** | New | 6-step conversational setup with archetypes + personality |
+| **Skills Browser** | New | Community-trusted skills with trust scoring and gating |
+| **Global Personality** | New | Toggleable user context shared across all agents |
+| **Learning System** | New | Agents learn from interactions and offer suggestions |
+| **Desktop App** | Beta | Electron app with 9-tab navigation, dark theme |
+| **Mobile App** | Alpha | React Native/Expo with biometric auth |
+
+---
 
 ## Why SPA?
 
@@ -17,12 +37,12 @@ SPA solves this by treating **prompts like API requests**: each one can be signe
 
 ```
 User → [Sign prompt with private key] → SPA1: token
-                                            ↓
-OpenClaw Gateway → [SPAProcessor verifies signature]
-                        ↓                    ↓
-                   Valid + Authorized    Invalid/Unauthorized
-                        ↓                    ↓
-                   Execute tools          Block & log
+          ↑ (text or voice)                  ↓
+    Voice Pipeline              OpenClaw Gateway → [SPAProcessor verifies]
+    ┌─ Whisper.cpp local ┐          ↓                    ↓
+    ├─ OpenAI Whisper API ├    Valid + Authorized    Invalid/Unauthorized
+    └─ WhisperFlo realtime┘         ↓                    ↓
+                               Execute tools          Block & log
 ```
 
 ## Quick Start
@@ -47,64 +67,120 @@ npx tsx src/cli/main.ts list
 npx tsx src/cli/main.ts gates
 ```
 
+---
+
+## Voice & Speech-to-Text
+
+Pluggable STT pipeline that converts voice memos into signed prompts.
+
+| Provider | Type | Features |
+|---|---|---|
+| **Whisper.cpp** | Local | On-device, no API key, privacy-first |
+| **OpenAI Whisper** | Cloud | High accuracy, 50+ languages |
+| **WhisperFlo** | Cloud+Realtime | Batch and live WebSocket streaming |
+
+**Flow:** Record → Transcribe → Preview → Sign → Send. Verified sources auto-sign.
+
+| Variable | Description |
+|---|---|
+| `WHISPER_CPP_PATH` | Path to whisper.cpp binary |
+| `WHISPER_MODEL_PATH` | Path to local Whisper model |
+| `OPENAI_API_KEY` | OpenAI API key (for Whisper API) |
+| `WHISPERFLO_API_KEY` | WhisperFlo API key |
+| `WHISPERFLO_ENDPOINT` | WhisperFlo endpoint URL |
+
+---
+
+## Agents
+
+Create and manage specialized AI agents with personality, tools, and brain files (SOUL.md, IDENTITY.md, TOOLS.md, MEMORY.md).
+
+**6-step creation wizard:** Archetype → Identity → Personality → Jobs & Context → Model & Auth → Review (with learning toggle).
+
+Five archetypes: Personal Assistant, Developer Partner, Deep Researcher, Creative Director, DevOps/SysAdmin — or Custom.
+
+**Learning system:** Toggleable per-agent. Observes interaction patterns and offers suggestions. Data stays on-device.
+
+---
+
+## Global Personality
+
+Define your personal context once via the **"You"** tab — who you are, your expertise, your core vision. When enabled, every agent inherits this context. Toggleable. All data stays local.
+
+---
+
+## Skills Framework
+
+> **Prototype** — Type system and UI ready. Full implementation pending community discussion on trust and sandboxing.
+
+| Trust Tier | Score | Description |
+|---|---|---|
+| **Trusted** | 80+ | Code audited, verified author |
+| **Community** | 50–79 | Positive reviews, moderate adoption |
+| **New** | 30–49 | Recently published |
+| **Untrusted** | 0–29 | Install at your own risk |
+| **Blocked** | N/A | Flagged for security concerns |
+
+Built-in Skills Browser with search, category filters, trust badges, gate requirements, and install/remove.
+
+---
+
 ## Monorepo Structure
 
 ```
 openclaw-spa/
-├── package.json
-├── tsconfig.json
-├── README.md
-├── skill/SKILL.md              # Agent behavior rules
 ├── src/
-│   ├── types.ts                # Core type definitions
-│   ├── index.ts                # Barrel export
-│   ├── crypto/
-│   │   ├── key-manager.ts      # Key generation, registry CRUD
-│   │   └── envelope.ts         # Sign, verify, serialize envelopes
+│   ├── types.ts                      # Core SPA types
+│   ├── index.ts                      # Barrel export
+│   ├── crypto/                       # Signing & verification
+│   │   ├── key-manager.ts
+│   │   └── envelope.ts
 │   ├── gates/
-│   │   └── registry.ts         # Action → auth level mapping
+│   │   └── registry.ts              # Action → auth level mapping
 │   ├── middleware/
-│   │   └── gateway-plugin.ts   # SPAProcessor + Express middleware
+│   │   └── gateway-plugin.ts        # SPAProcessor + Express middleware
 │   ├── cli/
-│   │   └── main.ts             # CLI commands
+│   │   └── main.ts                  # CLI commands
+│   ├── providers/
+│   │   ├── types.ts                 # LLM provider types
+│   │   ├── base-adapter.ts          # Abstract LLM adapter
+│   │   └── voice/                   # ★ Voice / STT subsystem
+│   │       ├── types.ts             # STT types, pipeline config
+│   │       ├── base-stt-adapter.ts  # Abstract STT adapter
+│   │       ├── whisper-local.ts     # Whisper.cpp local
+│   │       ├── whisper-api.ts       # OpenAI Whisper API
+│   │       ├── whisperflo.ts        # WhisperFlo + realtime
+│   │       ├── voice-pipeline.ts    # Transcribe → verify → sign
+│   │       └── index.ts
+│   ├── skills/
+│   │   └── types.ts                 # ★ Skills framework types + trust
 │   ├── messaging/
-│   │   ├── types.ts            # Channel message types
-│   │   ├── identity.ts         # Channel → SPA key bindings
-│   │   ├── bridge.ts           # Message processing bridge
-│   │   ├── server.ts           # Unified HTTP server
-│   │   └── adapters/
-│   │       ├── whatsapp.ts     # WhatsApp Business API
-│   │       ├── signal.ts       # Signal (via signal-cli)
-│   │       ├── telegram.ts     # Telegram Bot API
-│   │       ├── discord.ts      # Discord Gateway + REST
-│   │       ├── imessage.ts     # iMessage (macOS AppleScript)
-│   │       ├── slack.ts        # Slack Socket Mode + Web API
-│   │       ├── sms.ts          # SMS/MMS via Twilio
-│   │       ├── email.ts        # Email via IMAP/SMTP
-│   │       ├── teams.ts        # Microsoft Teams Bot Framework
-│   │       ├── matrix.ts       # Matrix Client-Server API
-│   │       ├── irc.ts          # IRC raw socket
-│   │       ├── messenger.ts    # Facebook Messenger Graph API
-│   │       ├── googlechat.ts   # Google Chat Workspace API
-│   │       ├── x.ts            # X (Twitter) DM API v2
-│   │       ├── line.ts         # LINE Messaging API
-│   │       ├── wechat.ts       # WeChat Official Account API
-│   │       └── webhook.ts      # Generic webhook (catch-all)
-│   ├── desktop/                # ⚠️ UNTESTED
+│   │   ├── types.ts / identity.ts / bridge.ts / server.ts
+│   │   └── adapters/               # 17 platform adapters
+│   ├── desktop/                     # Electron desktop app
 │   │   ├── main/
-│   │   │   ├── index.ts        # Electron main process
-│   │   │   └── preload.ts      # Secure IPC bridge
+│   │   │   ├── index.ts            # Main process
+│   │   │   └── preload.ts          # IPC bridge (voice, skills, personality, learning)
 │   │   └── renderer/
-│   │       ├── index.html
-│   │       ├── main.tsx        # Entry point
-│   │       └── App.tsx         # React chat UI
-│   └── mobile/                 # ⚠️ UNTESTED
-│       ├── crypto/
-│       │   └── spa.ts          # On-device crypto + biometrics
-│       ├── hooks/
-│       │   └── useGateway.ts   # WebSocket gateway hook
-│       └── screens/
-│           └── ChatScreen.tsx  # React Native chat UI
+│   │       ├── App.tsx              # 9-tab React app
+│   │       └── components/
+│   │           ├── shared.tsx       # Design tokens & shared UI
+│   │           ├── types.d.ts       # Window.spa type declarations
+│   │           ├── DashboardView.tsx
+│   │           ├── ChatView.tsx     # Chat + voice recorder
+│   │           ├── AgentsView.tsx   # ★ Agent fleet + creation wizard
+│   │           ├── KeysView.tsx
+│   │           ├── GatesView.tsx
+│   │           ├── AuditView.tsx
+│   │           ├── SettingsView.tsx
+│   │           ├── VoiceRecorder.tsx    # ★ Voice memo capture + waveform
+│   │           ├── SkillsBrowser.tsx    # ★ Skills browser + trust UI
+│   │           ├── GlobalPersonality.tsx # ★ User context definition
+│   │           └── Modals.tsx
+│   └── mobile/                      # React Native / Expo (alpha)
+│       ├── crypto/spa.ts
+│       ├── hooks/useGateway.ts
+│       └── screens/ChatScreen.tsx
 ```
 
 ## Security Features
@@ -169,13 +245,27 @@ Tools are gated by authorization level:
 
 Customize gates via `~/.openclaw-spa/gates.json` or programmatically.
 
-## Desktop & Mobile Apps
+## Desktop App
 
-> ⚠️ **UNTESTED** — The desktop (Electron) and mobile (React Native/Expo) apps are included for ease of use. I built this project in about an hour, so these haven't been tested yet. They should work in theory but may need adjustments. PRs welcome!
+Electron app with a 9-tab dark-theme UI:
 
-**Desktop features:** Electron app with OS keychain storage, WebSocket gateway, dark-theme chat UI.
+- **Dashboard** — System status, key overview, quick actions
+- **Agents** — Fleet management with creation wizard, quick chat, brain files
+- **Chat** — Full chat with signature verification, voice input, agent selector
+- **Keys** — Key generation and management
+- **Gates** — Action gate configuration
+- **Audit** — Security event log
+- **Skills** — Community skills browser with trust scoring
+- **You** — Global personality / context definition
+- **Settings** — Providers, messaging adapters, runtime config
 
-**Mobile features:** On-device RSA key generation, biometric auth for elevated/admin prompts, WebSocket connection, React Native chat UI.
+Features: OS keychain storage, WebSocket gateway, command palette (⌘K), keyboard shortcuts, exec approval flow.
+
+## Mobile App
+
+> ⚠️ **Alpha** — React Native/Expo. May need adjustments. PRs welcome!
+
+On-device RSA key generation, biometric auth for elevated/admin prompts, WebSocket connection.
 
 ## Environment Variables
 

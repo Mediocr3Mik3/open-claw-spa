@@ -124,6 +124,39 @@ declare global {
         detect: () => Promise<SetupDetection>;
         installRuntime: (runtimeName: string) => Promise<{ success: boolean; method?: string; url?: string; error?: string }>;
       };
+      voice: {
+        transcribe: (opts: { audio_base64: string; mime_type: string; options?: Record<string, unknown> }) => Promise<{
+          text: string; language?: string; confidence?: number; processing_time_ms: number; provider_id: string; model?: string;
+        }>;
+        listProviders: () => Promise<{ id: string; name: string; type: string }[]>;
+        setProvider: (providerId: string) => Promise<boolean>;
+        getConfig: () => Promise<Record<string, unknown>>;
+        setConfig: (config: Record<string, unknown>) => Promise<boolean>;
+        health: () => Promise<Record<string, { available: boolean; error?: string }>>;
+        onTranscription: (callback: (result: unknown) => void) => void;
+      };
+      skills: {
+        search: (params: Record<string, unknown>) => Promise<{ skills: unknown[]; total: number }>;
+        installed: () => Promise<unknown[]>;
+        install: (skillId: string) => Promise<{ success: boolean; error?: string }>;
+        remove: (skillId: string) => Promise<boolean>;
+        enable: (skillId: string, agentId?: string) => Promise<boolean>;
+        disable: (skillId: string, agentId?: string) => Promise<boolean>;
+        getManifest: (skillId: string) => Promise<unknown>;
+        getTrust: (skillId: string) => Promise<unknown>;
+        approveGate: (skillId: string, tool: string) => Promise<boolean>;
+      };
+      personality: {
+        get: () => Promise<{ context: string; vision: string; enabled: boolean } | null>;
+        set: (data: { context: string; vision: string; enabled: boolean }) => Promise<boolean>;
+      };
+      learning: {
+        getSuggestions: (agentId: string) => Promise<unknown[]>;
+        dismissSuggestion: (agentId: string, suggestionId: string) => Promise<boolean>;
+        getInsights: (agentId: string) => Promise<unknown>;
+        setEnabled: (agentId: string, enabled: boolean) => Promise<boolean>;
+        isEnabled: (agentId: string) => Promise<boolean>;
+      };
       onIntrusionAlert: (callback: (alert: unknown) => void) => void;
     };
   }

@@ -10,18 +10,19 @@ import React, { useState, useEffect } from "react";
 // ─── Design Tokens ───────────────────────────────────────────────────────
 
 export const C = {
-  bg: "#06060e", surface: "#0c0d18", raised: "#111222", bright: "#181a2e",
-  border: "rgba(255,255,255,0.05)", borderLight: "rgba(255,255,255,0.08)", borderAccent: "rgba(99,130,255,0.25)",
-  text: "#eeeef5", dim: "#8b8da3", muted: "#4e5068",
-  accent: "#6882ff", accentSoft: "rgba(104,130,255,0.12)",
-  ok: "#34d399", okSoft: "rgba(52,211,153,0.1)",
-  warn: "#fbbf24", warnSoft: "rgba(251,191,36,0.1)",
-  err: "#f87171", errSoft: "rgba(248,113,113,0.1)",
+  bg: "#08080f", surface: "#0d0e1a", raised: "#121324", bright: "#1a1c30",
+  border: "rgba(255,255,255,0.06)", borderLight: "rgba(255,255,255,0.09)", borderAccent: "rgba(99,130,255,0.2)",
+  text: "#f0f0f8", dim: "#8b8da3", muted: "#4e5068",
+  accent: "#6882ff", accentSoft: "rgba(104,130,255,0.1)",
+  ok: "#34d399", okSoft: "rgba(52,211,153,0.08)",
+  warn: "#fbbf24", warnSoft: "rgba(251,191,36,0.08)",
+  err: "#f87171", errSoft: "rgba(248,113,113,0.08)",
   grad: "linear-gradient(135deg, #6882ff 0%, #a855f7 100%)",
-  gradSoft: "linear-gradient(135deg, rgba(104,130,255,0.08) 0%, rgba(168,85,247,0.08) 100%)",
+  gradSoft: "linear-gradient(135deg, rgba(104,130,255,0.06) 0%, rgba(168,85,247,0.06) 100%)",
   font: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif",
   mono: "'SF Mono', 'JetBrains Mono', 'Cascadia Code', monospace",
-  r: "14px", rs: "10px", rx: "6px",
+  r: "12px", rs: "8px", rx: "6px",
+  safePadTop: 38,
 };
 
 export const LEVEL: Record<string, string> = { standard: C.dim, elevated: C.warn, admin: C.err };
@@ -49,14 +50,19 @@ export const injectCSS = () => {
     @keyframes spin{to{transform:rotate(360deg)}}
     @keyframes slideIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
     @keyframes scaleIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+    @keyframes recordPulse{0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,0.4)}50%{box-shadow:0 0 0 6px rgba(248,113,113,0)}}
     *{margin:0;padding:0;box-sizing:border-box}
     body{background:${C.bg};overflow:hidden;font-family:${C.font}}
     ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}
     ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.07);border-radius:3px}
     input,select,textarea{font-family:${C.font}}
-    button{font-family:${C.font};cursor:pointer;transition:all .12s ease}
-    button:hover{filter:brightness(1.12)}button:active{transform:scale(.97)}
-    .oc-tooltip{position:relative}.oc-tooltip:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100%+6px);left:50%;transform:translateX(-50%);background:#1a1b2e;color:#eeeef5;padding:4px 10px;border-radius:6px;font-size:10px;white-space:nowrap;z-index:999;border:1px solid rgba(255,255,255,0.08)}
+    button{font-family:${C.font};cursor:pointer;transition:all .15s ease}
+    button:hover{filter:brightness(1.15)}button:active{transform:scale(.97)}
+    .oc-tooltip{position:relative}.oc-tooltip:hover::after{content:attr(data-tip);position:absolute;left:calc(100% + 10px);top:50%;transform:translateY(-50%);background:#1e1f34;color:#f0f0f8;padding:5px 12px;border-radius:8px;font-size:10px;white-space:nowrap;z-index:999;border:1px solid rgba(255,255,255,0.1);box-shadow:0 4px 16px rgba(0,0,0,0.4);pointer-events:none;letter-spacing:0.2px}
+    ::selection{background:rgba(104,130,255,0.3)}
+    input::placeholder,textarea::placeholder{color:#4e5068}
+    input:focus,textarea:focus,select:focus{box-shadow:0 0 0 2px rgba(104,130,255,0.12)}
+    .oc-glass-hover:hover{border-color:rgba(255,255,255,0.1) !important;background:${C.raised} !important}
   `;
   document.head.appendChild(s);
 };
@@ -72,7 +78,7 @@ export const Pill = ({ children, color, bg, onClick }: { children: React.ReactNo
 );
 
 export const Card = ({ children, style, glow, onClick }: { children: React.ReactNode; style?: React.CSSProperties; glow?: boolean; onClick?: () => void }) => (
-  <div onClick={onClick} style={{ ...glass(1), padding: 20, animation: glow ? "glow 3s ease-in-out infinite" : undefined, cursor: onClick ? "pointer" : undefined, ...style }}>{children}</div>
+  <div onClick={onClick} style={{ ...glass(1), padding: 18, animation: glow ? "glow 3s ease-in-out infinite" : undefined, cursor: onClick ? "pointer" : undefined, transition: "border-color .15s, background .15s", ...style }}>{children}</div>
 );
 
 export const Btn = ({ children, v, onClick, disabled, style }: { children: React.ReactNode; v?: "p" | "g" | "d"; onClick?: () => void; disabled?: boolean; style?: React.CSSProperties }) => {
@@ -84,6 +90,12 @@ export const Btn = ({ children, v, onClick, disabled, style }: { children: React
 export const Input = ({ value, onChange, placeholder, type, style, onKeyDown }: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string; style?: React.CSSProperties; onKeyDown?: (e: React.KeyboardEvent) => void }) => (
   <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} onKeyDown={onKeyDown}
     style={{ width: "100%", padding: "10px 14px", background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: C.rs, fontSize: 14, outline: "none", ...style }}
+    onFocus={e => { e.currentTarget.style.borderColor = C.accent; }} onBlur={e => { e.currentTarget.style.borderColor = C.border; }} />
+);
+
+export const TextArea = ({ value, onChange, placeholder, rows, style }: { value: string; onChange: (v: string) => void; placeholder?: string; rows?: number; style?: React.CSSProperties }) => (
+  <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows ?? 12}
+    style={{ width: "100%", padding: "12px 14px", background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: C.rs, fontSize: 13, fontFamily: C.mono, outline: "none", resize: "vertical" as const, lineHeight: 1.6, ...style }}
     onFocus={e => { e.currentTarget.style.borderColor = C.accent; }} onBlur={e => { e.currentTarget.style.borderColor = C.border; }} />
 );
 
@@ -237,4 +249,4 @@ export interface BridgeLog { level: string; message: string; timestamp: string; 
 export interface ModelInfo { id: string; label: string; provider_id: string; parameter_count_b?: number; context_window?: number; strengths?: string[]; estimated_cost_per_1k_input?: number; estimated_cost_per_1k_output?: number; }
 export interface SetupDetection { hardware: { cpu: string; ram_gb: number; gpus: { name: string; vram_gb: number; vendor: string }[] }; runtimes: any[]; configured_providers: string[]; recommendations: { model: string; tier: string; reason: string; fits_in_memory: boolean }[]; summary: string; warnings: string[]; suggested_runtime: string; needs_runtime_install: boolean; }
 export interface AgentConfig { id: string; name: string; description?: string; auth_level: string; model_id?: string; model_provider?: string; status: "online" | "offline" | "error"; created_at: string; last_active?: string; tools?: string[]; brain_files?: { name: string; content: string }[]; }
-export type View = "dashboard" | "agents" | "chat" | "keys" | "gates" | "audit" | "settings";
+export type View = "dashboard" | "agents" | "chat" | "keys" | "gates" | "audit" | "settings" | "skills" | "personality";
