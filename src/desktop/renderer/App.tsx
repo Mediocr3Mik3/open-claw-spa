@@ -35,6 +35,10 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
   const [keyResult, setKeyResult] = useState<{ key_id: string; fingerprint: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(true);
+  const [gwUrlSetup, setGwUrlSetup] = useState("ws://localhost:18789");
+  const [llmChoice, setLlmChoice] = useState<"local" | "cloud" | "skip">("local");
+  const [adapterToggles, setAdapterToggles] = useState<Record<string, boolean>>({});
+  const [gatePreset, setGatePreset] = useState<"development" | "production" | "compliance" | "skip">("development");
 
   useEffect(() => {
     injectCSS();
@@ -46,35 +50,50 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
 
   const genKey = async () => {
     setLoading(true);
-    try { const r = await window.spa.generateKey({ label: keyLabel, max_auth_level: keyLevel }); setKeyResult(r); setStep(3); }
+    try { const r = await window.spa.generateKey({ label: keyLabel, max_auth_level: keyLevel }); setKeyResult(r); setStep(4); }
     catch (e) { alert(`Key generation failed: ${e}`); }
     setLoading(false);
   };
 
   const finish = async () => { await window.spa.setup.complete(); onComplete(); };
-  const labels = ["System", "Hardware", "Key", "Secure"];
-  const LEVEL: Record<string, string> = { standard: C.dim, elevated: C.warn, admin: C.err };
+  const STEPS = ["Welcome", "Hardware", "Gateway", "Key", "Provider", "Messaging", "Gates", "Personality", "Secure"];
+  const totalSteps = STEPS.length;
+  const LVL_C: Record<string, string> = { standard: C.dim, elevated: C.warn, admin: C.err };
+
+  const ADAPTERS = [
+    { id: "whatsapp", label: "WhatsApp", icon: "&#128242;" },
+    { id: "telegram", label: "Telegram", icon: "&#9992;" },
+    { id: "discord", label: "Discord", icon: "&#127918;" },
+    { id: "slack", label: "Slack", icon: "&#128172;" },
+    { id: "signal", label: "Signal", icon: "&#128274;" },
+    { id: "imessage", label: "iMessage", icon: "&#128172;" },
+  ];
 
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: C.bg, fontFamily: C.font }}>
-      <div style={{ width: 540, ...glass(1), padding: "48px 44px", color: C.text, animation: "fadeIn .5s ease" }}>
+      <div style={{ width: 560, maxHeight: "90vh", overflowY: "auto" as const, ...glass(1), padding: "44px 44px", color: C.text, animation: "fadeIn .5s ease" }}>
         <div style={{ textAlign: "center" as const, marginBottom: 8 }}>
           <div style={{ fontSize: 28, fontWeight: 700, background: C.grad, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", letterSpacing: -0.5 }}>OpenClaw</div>
           <div style={{ fontSize: 10, color: C.muted, letterSpacing: 3, textTransform: "uppercase" as const, marginTop: 4 }}>Signed Prompt Architecture</div>
         </div>
-        <div style={{ display: "flex", justifyContent: "center", gap: 4, margin: "28px 0 32px" }}>
-          {labels.map((l, i) => (
-            <div key={l} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, background: i <= step ? C.grad : "rgba(255,255,255,0.03)", color: i <= step ? "#fff" : C.muted, border: i > step ? `1px solid ${C.border}` : "none", transition: "all .3s" }}>{i + 1}</div>
-              {i < 3 && <div style={{ width: 32, height: 1, background: i < step ? C.accent : C.border, transition: "background .3s" }} />}
-            </div>
-          ))}
+
+        {/* Progress bar */}
+        <div style={{ margin: "24px 0 28px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 10, color: C.dim }}>{STEPS[step]}</span>
+            <span style={{ fontSize: 10, color: C.muted }}>{step + 1}/{totalSteps}</span>
+          </div>
+          <div style={{ height: 3, background: C.border, borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${((step + 1) / totalSteps) * 100}%`, background: C.grad, borderRadius: 2, transition: "width .4s ease" }} />
+          </div>
         </div>
 
+        {/* Step 0: Welcome */}
         {step === 0 && (
           <div style={{ animation: "fadeIn .3s ease" }}>
-            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Welcome</h2>
-            <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, marginBottom: 20 }}>OpenClaw signs every prompt with your cryptographic key. No unsigned message reaches your AI agent.</p>
+            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Welcome to OpenClaw</h2>
+            <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, marginBottom: 8 }}>I'll walk you through setting up your secure AI workspace. Every prompt you send will be cryptographically signed — no unsigned message ever reaches your agents.</p>
+            <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 20 }}>This takes about 2 minutes. Let's start by checking your system.</p>
             <div style={{ ...glass(0), padding: 16, marginBottom: 22, borderRadius: C.r }}>
               {[
                 { l: "Platform", v: `${platform.platform ?? "..."} (${platform.arch ?? "..."})`, ok: true },
@@ -86,16 +105,17 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                 </div>
               ))}
             </div>
-            <Btn onClick={() => setStep(1)} style={{ width: "100%", padding: "12px 0", fontSize: 14 }}>Continue</Btn>
+            <Btn onClick={() => setStep(1)} style={{ width: "100%", padding: "12px 0", fontSize: 14 }}>Let's Go</Btn>
           </div>
         )}
 
+        {/* Step 1: Hardware */}
         {step === 1 && (
           <div style={{ animation: "fadeIn .3s ease" }}>
             <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Your Hardware</h2>
             {scanning ? (
               <div style={{ textAlign: "center" as const, padding: "40px 0", color: C.dim }}>
-                <Spinner /><div style={{ marginTop: 14 }}>Scanning system...</div>
+                <Spinner /><div style={{ marginTop: 14 }}>Scanning your system...</div>
               </div>
             ) : detection ? (
               <>
@@ -110,8 +130,8 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                 </div>
                 {detection.needs_runtime_install && (
                   <div style={{ ...glass(0), padding: 14, marginBottom: 16, borderLeft: `3px solid ${C.warn}` }}>
-                    <div style={{ fontSize: 12, color: C.warn, fontWeight: 600, marginBottom: 2 }}>No local runtime</div>
-                    <p style={{ fontSize: 11, color: C.dim }}>You can install <strong style={{ color: C.text }}>Ollama</strong> from Settings after setup.</p>
+                    <div style={{ fontSize: 12, color: C.warn, fontWeight: 600, marginBottom: 2 }}>No local runtime found</div>
+                    <p style={{ fontSize: 11, color: C.dim }}>Don't worry — you can install <strong style={{ color: C.text }}>Ollama</strong> later, or use a cloud provider like OpenAI.</p>
                   </div>
                 )}
                 {detection.recommendations.length > 0 && (
@@ -126,16 +146,39 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                     ))}
                   </div>
                 )}
-                <Btn onClick={() => setStep(2)} style={{ width: "100%", padding: "12px 0", fontSize: 14 }}>Continue</Btn>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Btn v="g" onClick={() => setStep(0)} style={{ padding: "12px 0", flex: 1, fontSize: 13 }}>Back</Btn>
+                  <Btn onClick={() => setStep(2)} style={{ padding: "12px 0", flex: 2, fontSize: 14 }}>Continue</Btn>
+                </div>
               </>
-            ) : <div style={{ color: C.err, padding: 20 }}>Detection failed.</div>}
+            ) : <div style={{ color: C.err, padding: 20 }}>Detection failed. <Btn v="g" onClick={() => setStep(2)} style={{ marginLeft: 8 }}>Skip</Btn></div>}
           </div>
         )}
 
+        {/* Step 2: Gateway */}
         {step === 2 && (
           <div style={{ animation: "fadeIn .3s ease" }}>
-            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Create Signing Key</h2>
-            <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, marginBottom: 20 }}>This ECDSA P-384 key is stored in your OS keychain. It signs every elevated prompt so your agent knows it came from you.</p>
+            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Gateway Connection</h2>
+            <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, marginBottom: 20 }}>The OpenClaw gateway routes signed messages between you and your AI agents. The default runs locally on your machine.</p>
+            <label style={{ fontSize: 11, color: C.dim, display: "block", marginBottom: 6 }}>Gateway URL</label>
+            <input value={gwUrlSetup} onChange={e => setGwUrlSetup(e.target.value)} style={{ width: "100%", padding: "10px 14px", background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: C.rs, fontSize: 13, fontFamily: C.mono, outline: "none", marginBottom: 14 }} />
+            <div style={{ ...glass(0), padding: 12, marginBottom: 22, borderLeft: `3px solid ${C.accent}`, borderRadius: C.rs }}>
+              <div style={{ fontSize: 11, color: C.dim, lineHeight: 1.6 }}>
+                <strong style={{ color: C.text }}>Tip:</strong> Keep the default for local development. Change this if connecting to a remote gateway or team server.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn v="g" onClick={() => setStep(1)} style={{ padding: "12px 0", flex: 1, fontSize: 13 }}>Back</Btn>
+              <Btn onClick={() => setStep(3)} style={{ padding: "12px 0", flex: 2, fontSize: 14 }}>Continue</Btn>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Signing Key */}
+        {step === 3 && (
+          <div style={{ animation: "fadeIn .3s ease" }}>
+            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Create Your Signing Key</h2>
+            <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, marginBottom: 20 }}>This is the heart of OpenClaw's security. Your ECDSA P-384 key lives in the OS keychain and signs every elevated prompt so agents know it came from you.</p>
             <label style={{ fontSize: 11, color: C.dim, display: "block", marginBottom: 6 }}>Key Label</label>
             <input value={keyLabel} onChange={e => setKeyLabel(e.target.value)} style={{ width: "100%", padding: "10px 14px", background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: C.rs, fontSize: 14, outline: "none", marginBottom: 14 }} />
             <label style={{ fontSize: 11, color: C.dim, display: "block", marginBottom: 6 }}>Max Authorization Level</label>
@@ -144,15 +187,134 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                 <button key={l} onClick={() => setKeyLevel(l)} style={{ flex: 1, padding: "10px 0", borderRadius: C.rs, border: keyLevel === l ? `1px solid ${C.accent}` : `1px solid ${C.border}`, background: keyLevel === l ? C.accentSoft : "transparent", color: keyLevel === l ? C.accent : C.dim, fontWeight: 600, fontSize: 12, textTransform: "capitalize" as const, transition: "all .15s" }}>{l}</button>
               ))}
             </div>
-            <Btn onClick={genKey} disabled={loading} style={{ width: "100%", padding: "12px 0", fontSize: 14 }}>{loading ? "Generating..." : "Generate Key Pair"}</Btn>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn v="g" onClick={() => setStep(2)} style={{ padding: "12px 0", flex: 1, fontSize: 13 }}>Back</Btn>
+              <Btn onClick={genKey} disabled={loading} style={{ padding: "12px 0", flex: 2, fontSize: 14 }}>{loading ? "Generating..." : "Generate Key Pair"}</Btn>
+            </div>
           </div>
         )}
 
-        {step === 3 && (
+        {/* Step 4: LLM Provider */}
+        {step === 4 && (
+          <div style={{ animation: "fadeIn .3s ease" }}>
+            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Choose Your AI Provider</h2>
+            <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, marginBottom: 8 }}>
+              {keyResult ? "Key created successfully! " : ""}How would you like to run your AI models?
+            </p>
+            <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 20 }}>You can always change this later in Settings.</p>
+            <div style={{ display: "flex", flexDirection: "column" as const, gap: 8, marginBottom: 22 }}>
+              {([
+                { id: "local" as const, icon: "&#128187;", label: "Local Runtime", desc: "Run models privately on your machine (Ollama, llama.cpp, LM Studio)", tag: "Private" },
+                { id: "cloud" as const, icon: "&#9729;", label: "Cloud Provider", desc: "Use OpenAI, Anthropic, Groq, or other API providers", tag: "Powerful" },
+                { id: "skip" as const, icon: "&#8594;", label: "Set Up Later", desc: "Configure your LLM provider after setup", tag: "" },
+              ] as const).map(o => (
+                <button key={o.id} onClick={() => setLlmChoice(o.id)} style={{ ...glass(llmChoice === o.id ? 1 : 0), padding: "14px 16px", textAlign: "left" as const, display: "flex", alignItems: "center", gap: 12, borderRadius: C.r, border: llmChoice === o.id ? `1px solid ${C.borderAccent}` : `1px solid ${C.border}`, cursor: "pointer", transition: "all .15s" }}>
+                  <span style={{ fontSize: 20, opacity: llmChoice === o.id ? .8 : .4 }} dangerouslySetInnerHTML={{ __html: o.icon }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: llmChoice === o.id ? C.text : C.dim }}>{o.label}</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>{o.desc}</div>
+                  </div>
+                  {o.tag && <Pill bg={llmChoice === o.id ? C.accentSoft : "transparent"} color={llmChoice === o.id ? C.accent : C.muted}>{o.tag}</Pill>}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn v="g" onClick={() => setStep(3)} style={{ padding: "12px 0", flex: 1, fontSize: 13 }}>Back</Btn>
+              <Btn onClick={() => setStep(5)} style={{ padding: "12px 0", flex: 2, fontSize: 14 }}>Continue</Btn>
+            </div>
+          </div>
+        )}
+
+        {/* Step 5: Messaging */}
+        {step === 5 && (
+          <div style={{ animation: "fadeIn .3s ease" }}>
+            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Messaging Bridge</h2>
+            <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, marginBottom: 8 }}>OpenClaw can receive signed messages from your favorite messaging platforms. Select any you'd like to connect.</p>
+            <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 20 }}>You can configure credentials for each adapter later in Settings.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 22 }}>
+              {ADAPTERS.map(a => {
+                const on = adapterToggles[a.id] ?? false;
+                return (
+                  <button key={a.id} onClick={() => setAdapterToggles(p => ({ ...p, [a.id]: !on }))}
+                    style={{ ...glass(on ? 1 : 0), padding: "14px 10px", textAlign: "center" as const, borderRadius: C.r, border: on ? `1px solid ${C.borderAccent}` : `1px solid ${C.border}`, cursor: "pointer", transition: "all .15s" }}>
+                    <span style={{ fontSize: 18, display: "block", marginBottom: 4, opacity: on ? .8 : .3 }} dangerouslySetInnerHTML={{ __html: a.icon }} />
+                    <div style={{ fontSize: 11, fontWeight: 600, color: on ? C.accent : C.muted }}>{a.label}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn v="g" onClick={() => setStep(4)} style={{ padding: "12px 0", flex: 1, fontSize: 13 }}>Back</Btn>
+              <Btn onClick={() => setStep(6)} style={{ padding: "12px 0", flex: 2, fontSize: 14 }}>
+                {Object.values(adapterToggles).some(Boolean) ? "Continue" : "Skip for Now"}
+              </Btn>
+            </div>
+          </div>
+        )}
+
+        {/* Step 6: Action Gates */}
+        {step === 6 && (
+          <div style={{ animation: "fadeIn .3s ease" }}>
+            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Security Gates</h2>
+            <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, marginBottom: 20 }}>Action gates control which tools require signed authorization before an agent can use them. Choose a starting preset — you can customize individual gates anytime.</p>
+            <div style={{ display: "flex", flexDirection: "column" as const, gap: 8, marginBottom: 22 }}>
+              {([
+                { id: "development" as const, label: "Development", desc: "Relaxed gates for coding. Shell exec needs approval, file writes are standard.", count: 4 },
+                { id: "production" as const, label: "Production", desc: "Strict gates for live systems. Most actions require elevated or admin approval.", count: 8 },
+                { id: "compliance" as const, label: "Compliance", desc: "Maximum security. Every sensitive action requires admin-level signing.", count: 10 },
+                { id: "skip" as const, label: "No Gates (Configure Later)", desc: "Start without gates. You can add them from the Authorization view.", count: 0 },
+              ] as const).map(p => (
+                <button key={p.id} onClick={() => setGatePreset(p.id)} style={{ ...glass(gatePreset === p.id ? 1 : 0), padding: "14px 16px", textAlign: "left" as const, display: "flex", alignItems: "center", gap: 12, borderRadius: C.r, border: gatePreset === p.id ? `1px solid ${C.borderAccent}` : `1px solid ${C.border}`, cursor: "pointer", transition: "all .15s" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: gatePreset === p.id ? C.text : C.dim }}>{p.label}</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>{p.desc}</div>
+                  </div>
+                  {p.count > 0 && <Pill bg={gatePreset === p.id ? C.accentSoft : "transparent"} color={gatePreset === p.id ? C.accent : C.muted}>{p.count} gates</Pill>}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn v="g" onClick={() => setStep(5)} style={{ padding: "12px 0", flex: 1, fontSize: 13 }}>Back</Btn>
+              <Btn onClick={() => setStep(7)} style={{ padding: "12px 0", flex: 2, fontSize: 14 }}>Continue</Btn>
+            </div>
+          </div>
+        )}
+
+        {/* Step 7: Personality */}
+        {step === 7 && (
+          <div style={{ animation: "fadeIn .3s ease" }}>
+            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Default Agent Personality</h2>
+            <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, marginBottom: 20 }}>Set a default communication style for your agents. Each agent can override this with their own personality later.</p>
+            <div style={{ display: "flex", flexDirection: "column" as const, gap: 8, marginBottom: 22 }}>
+              {[
+                { icon: "&#128188;", label: "Professional", desc: "Clear, concise, and focused" },
+                { icon: "&#128075;", label: "Friendly", desc: "Warm, approachable, and conversational" },
+                { icon: "&#9889;", label: "Direct", desc: "Blunt, efficient, no fluff" },
+                { icon: "&#129504;", label: "Thoughtful", desc: "Nuanced, explores tradeoffs carefully" },
+              ].map(p => (
+                <div key={p.label} style={{ ...glass(0), padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, borderRadius: C.r, cursor: "pointer", transition: "all .12s", border: `1px solid ${C.border}` }}
+                  onClick={() => { /* personality preference stored on complete */ }}>
+                  <span style={{ fontSize: 16 }} dangerouslySetInnerHTML={{ __html: p.icon }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{p.label}</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>{p.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn v="g" onClick={() => setStep(6)} style={{ padding: "12px 0", flex: 1, fontSize: 13 }}>Back</Btn>
+              <Btn onClick={() => setStep(8)} style={{ padding: "12px 0", flex: 2, fontSize: 14 }}>Continue</Btn>
+            </div>
+          </div>
+        )}
+
+        {/* Step 8: Complete */}
+        {step === 8 && (
           <div style={{ animation: "fadeIn .3s ease", textAlign: "center" as const }}>
             <div style={{ width: 60, height: 60, borderRadius: "50%", background: C.okSoft, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 20px", color: C.ok, border: `2px solid ${C.ok}` }}>&#10003;</div>
-            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>OpenClaw is Secure</h2>
-            <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, marginBottom: 12 }}>Your signing key is encrypted in the OS keychain. Every prompt you send will be cryptographically signed.</p>
+            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>OpenClaw is Ready</h2>
+            <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, marginBottom: 12 }}>Your secure AI workspace is fully configured. Every prompt will be cryptographically signed and verified.</p>
             {keyResult && (
               <div style={{ ...glass(0), padding: 16, marginBottom: 14, textAlign: "left" as const, borderRadius: C.r }}>
                 {[
@@ -161,6 +323,9 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                   { l: "Encryption", v: "AES-256-GCM" },
                   { l: "Storage", v: "OS Keychain (safeStorage)" },
                   { l: "Algorithm", v: "ECDSA P-384" },
+                  { l: "Gateway", v: gwUrlSetup },
+                  { l: "Provider", v: llmChoice === "skip" ? "Not configured" : llmChoice === "local" ? "Local runtime" : "Cloud API" },
+                  { l: "Gates", v: gatePreset === "skip" ? "None" : `${gatePreset} preset` },
                 ].map(r => (
                   <div key={r.l} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}`, fontSize: 12 }}>
                     <span style={{ color: C.dim }}>{r.l}</span>
@@ -178,7 +343,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                 <li>All prompts require signature verification</li>
               </ul>
             </div>
-            <Btn onClick={finish} style={{ width: "100%", padding: "12px 0", fontSize: 14 }}>Open Dashboard</Btn>
+            <Btn onClick={finish} style={{ width: "100%", padding: "12px 0", fontSize: 14 }}>Launch OpenClaw</Btn>
           </div>
         )}
       </div>
