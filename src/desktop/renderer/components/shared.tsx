@@ -114,6 +114,7 @@ export const injectCSS = () => {
     @keyframes glow{0%,100%{box-shadow:0 0 8px ${isDark ? "rgba(107,163,232,0.12)" : "rgba(74,143,212,0.12)"}}50%{box-shadow:0 0 20px ${isDark ? "rgba(107,163,232,0.25)" : "rgba(74,143,212,0.25)"}}}
     @keyframes spin{to{transform:rotate(360deg)}}
     @keyframes slideIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+    @keyframes slideInRight{from{opacity:0;transform:translateX(100%)}to{opacity:1;transform:translateX(0)}}
     @keyframes scaleIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
     @keyframes recordPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,74,74,0.4)}50%{box-shadow:0 0 0 6px rgba(201,74,74,0)}}
     @keyframes breathe{0%,100%{opacity:.7}50%{opacity:1}}

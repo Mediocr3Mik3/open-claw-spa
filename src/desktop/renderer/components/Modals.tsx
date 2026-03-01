@@ -106,54 +106,72 @@ export function ExecApprovalModal({ approval, keys, onApprove, onDeny, onClose }
     approval.requiredLevel === "elevated" ? ["admin", "elevated"].includes(k.max_auth_level) : true
   ));
 
+  const levelColor = LEVEL[approval.requiredLevel] ?? C.warn;
+
   return (
-    <Modal open={!!approval} onClose={onClose} title="Action Requires Approval" width={480}>
-      <div style={{ ...glass(0), padding: 16, marginBottom: 16, borderLeft: `3px solid ${C.warn}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <span style={{ fontSize: 20 }}>&#9888;&#65039;</span>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>Sensitive Operation</span>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: "6px 12px", fontSize: 12 }}>
-          <span style={{ color: C.dim }}>Operation:</span>
-          <span style={{ fontFamily: "'SF Mono', monospace", fontWeight: 600 }}>{approval.operation}</span>
-          <span style={{ color: C.dim }}>Command:</span>
-          <span style={{ fontFamily: "'SF Mono', monospace", color: C.warn, wordBreak: "break-all" as const }}>{approval.command}</span>
-          <span style={{ color: C.dim }}>Agent:</span>
-          <span>{approval.agent}</span>
-          <span style={{ color: C.dim }}>Required:</span>
-          <span><AuthBadge level={approval.requiredLevel} /></span>
-        </div>
-      </div>
-
-      {validKeys.length > 0 ? (
-        <>
-          <label style={{ fontSize: 11, color: C.dim, display: "block", marginBottom: 6 }}>Sign with key:</label>
-          <div style={{ marginBottom: 20 }}>
-            {validKeys.map(k => (
-              <div key={k.key_id} onClick={() => setSelKey(k.key_id)}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, marginBottom: 4, cursor: "pointer", background: selKey === k.key_id ? C.accentSoft : "transparent", border: selKey === k.key_id ? `1px solid ${C.borderAccent}` : `1px solid ${C.border}` }}>
-                <Dot color={selKey === k.key_id ? C.accent : C.muted} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600 }}>{k.label}</div>
-                  <div style={{ fontSize: 10, color: C.dim }}>{k.algorithm ?? "ecdsa-p384"} &middot; {k.max_auth_level}</div>
-                </div>
-              </div>
-            ))}
+    <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", justifyContent: "flex-end", background: "rgba(0,0,0,0.4)", animation: "fadeIn .15s ease" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 400, height: "100%", background: C.raised, borderLeft: `1px solid ${C.border}`, display: "flex", flexDirection: "column" as const, animation: "slideInRight .25s ease", overflow: "hidden" }}>
+        {/* Header with urgency stripe */}
+        <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`, background: `linear-gradient(135deg, ${levelColor}08, transparent)` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: levelColor + "18", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, animation: "pulse 2s infinite" }}>&#9888;&#65039;</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>Approval Required</div>
+              <div style={{ fontSize: 11, color: C.dim }}>Agent requests a sensitive operation</div>
+            </div>
+            <button onClick={onClose} style={{ background: "none", border: "none", color: C.dim, fontSize: 18, lineHeight: 1 }}>&times;</button>
           </div>
-        </>
-      ) : (
-        <div style={{ ...glass(0), padding: 16, marginBottom: 20, borderLeft: `3px solid ${C.err}` }}>
-          <span style={{ fontSize: 12, color: C.err }}>No keys available for {approval.requiredLevel}-level authorization. Generate an appropriate key first.</span>
+          <AuthBadge level={approval.requiredLevel} />
         </div>
-      )}
 
-      <div style={{ display: "flex", gap: 8 }}>
-        <Btn v="d" onClick={onDeny} style={{ flex: 1 }}>Deny</Btn>
-        <Btn onClick={() => onApprove(selKey)} disabled={!selKey} style={{ flex: 1 }}>
-          {validKeys.length > 0 ? "Sign & Approve" : "No Valid Key"}
-        </Btn>
+        {/* Operation details */}
+        <div style={{ padding: 24, flex: 1, overflowY: "auto" as const }}>
+          <div style={{ ...glass(0), padding: 16, marginBottom: 20, borderLeft: `3px solid ${levelColor}`, borderRadius: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: "8px 12px", fontSize: 12 }}>
+              <span style={{ color: C.dim, fontWeight: 600 }}>Operation</span>
+              <span style={{ fontFamily: C.mono, fontWeight: 600 }}>{approval.operation}</span>
+              <span style={{ color: C.dim, fontWeight: 600 }}>Command</span>
+              <span style={{ fontFamily: C.mono, color: levelColor, wordBreak: "break-all" as const, fontSize: 11 }}>{approval.command}</span>
+              <span style={{ color: C.dim, fontWeight: 600 }}>Agent</span>
+              <span>{approval.agent}</span>
+              <span style={{ color: C.dim, fontWeight: 600 }}>Time</span>
+              <span style={{ fontSize: 11, color: C.dim }}>{approval.timestamp.toLocaleTimeString()}</span>
+            </div>
+          </div>
+
+          {validKeys.length > 0 ? (
+            <>
+              <label style={{ fontSize: 11, color: C.dim, fontWeight: 600, display: "block", marginBottom: 8 }}>Sign with key:</label>
+              <div style={{ marginBottom: 16 }}>
+                {validKeys.map(k => (
+                  <div key={k.key_id} onClick={() => setSelKey(k.key_id)}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, marginBottom: 4, cursor: "pointer", background: selKey === k.key_id ? C.accentSoft : "transparent", border: selKey === k.key_id ? `1px solid ${C.borderAccent}` : `1px solid ${C.border}`, transition: "all .12s" }}>
+                    <Dot color={selKey === k.key_id ? C.accent : C.muted} size={7} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{k.label}</div>
+                      <div style={{ fontSize: 10, color: C.dim }}>{k.algorithm ?? "ecdsa-p384"} &middot; {k.max_auth_level}</div>
+                    </div>
+                    {selKey === k.key_id && <span style={{ color: C.accent, fontSize: 14 }}>&#10003;</span>}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div style={{ ...glass(0), padding: 16, marginBottom: 16, borderLeft: `3px solid ${C.err}`, borderRadius: 8 }}>
+              <span style={{ fontSize: 12, color: C.err }}>No keys available for {approval.requiredLevel}-level authorization. Generate an appropriate key first.</span>
+            </div>
+          )}
+        </div>
+
+        {/* Action buttons pinned to bottom */}
+        <div style={{ padding: "16px 24px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 10, background: C.surface }}>
+          <Btn v="d" onClick={onDeny} style={{ flex: 1, padding: "12px 0", fontSize: 13 }}>Deny</Btn>
+          <Btn onClick={() => onApprove(selKey)} disabled={!selKey} style={{ flex: 1, padding: "12px 0", fontSize: 13 }}>
+            {validKeys.length > 0 ? "Sign & Approve" : "No Valid Key"}
+          </Btn>
+        </div>
       </div>
-    </Modal>
+    </div>
   );
 }
 
