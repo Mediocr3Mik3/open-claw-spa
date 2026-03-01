@@ -20,6 +20,8 @@ const api = {
   setup: {
     isComplete: () => ipcRenderer.invoke("setup:is-complete"),
     complete: () => ipcRenderer.invoke("setup:complete"),
+    reset: () => ipcRenderer.invoke("setup:reset"),
+    factoryReset: () => ipcRenderer.invoke("setup:factory-reset"),
     checkNode: () => ipcRenderer.invoke("setup:check-node"),
     getPlatform: () => ipcRenderer.invoke("setup:get-platform"),
   },

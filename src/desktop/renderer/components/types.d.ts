@@ -12,6 +12,8 @@ declare global {
       setup: {
         isComplete: () => Promise<boolean>;
         complete: () => Promise<boolean>;
+        reset: () => Promise<boolean>;
+        factoryReset: () => Promise<boolean>;
         checkNode: () => Promise<{ installed: boolean; version: string | null }>;
         getPlatform: () => Promise<{
           platform: string; arch: string; electron_version: string;

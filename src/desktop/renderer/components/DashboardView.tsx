@@ -104,6 +104,25 @@ export default function DashboardView({ onNav, gwOn, brOn, keys }: { onNav: (v: 
         </div>
       )}
 
+      {/* ── Quick Actions ── */}
+      <Sec>Quick Actions</Sec>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
+        {[
+          { label: "Chat", sub: "Send signed messages", icon: "&#128172;", action: () => onNav("chat") },
+          { label: "Models", sub: "Switch or configure LLM", icon: "&#129302;", action: () => onNav("settings", "llm") },
+          { label: "Adapters", sub: "Connect messaging services", icon: "&#128268;", action: () => onNav("settings", "adapters") },
+          { label: "Audit", sub: "Review security events", icon: "&#128203;", action: () => onNav("audit") },
+        ].map(q => (
+          <button key={q.label} onClick={q.action} style={{ ...glass(1), padding: 16, textAlign: "left" as const, cursor: "pointer", display: "flex", gap: 10, alignItems: "center", borderRadius: C.r, transition: "all .12s" }}>
+            <span style={{ fontSize: 18, opacity: .4 }} dangerouslySetInnerHTML={{ __html: q.icon }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 1 }}>{q.label}</div>
+              <div style={{ fontSize: 10, color: C.dim }}>{q.sub}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+
       {/* ── Security Posture ── */}
       <Sec>Security Posture</Sec>
       <div style={{ ...glass(0), padding: 18, marginBottom: 20, borderRadius: C.r }}>
@@ -222,24 +241,6 @@ export default function DashboardView({ onNav, gwOn, brOn, keys }: { onNav: (v: 
         </div>
       </div>
 
-      {/* ── Quick Actions ── */}
-      <Sec>Quick Actions</Sec>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-        {[
-          { label: "Chat", sub: "Send signed messages", icon: "&#128172;", action: () => onNav("chat") },
-          { label: "Models", sub: "Switch or configure LLM", icon: "&#129302;", action: () => onNav("settings", "llm") },
-          { label: "Adapters", sub: "Connect messaging services", icon: "&#128268;", action: () => onNav("settings", "adapters") },
-          { label: "Audit", sub: "Review security events", icon: "&#128203;", action: () => onNav("audit") },
-        ].map(q => (
-          <button key={q.label} onClick={q.action} style={{ ...glass(1), padding: 16, textAlign: "left" as const, cursor: "pointer", display: "flex", gap: 10, alignItems: "center", borderRadius: C.r, transition: "all .12s" }}>
-            <span style={{ fontSize: 18, opacity: .4 }} dangerouslySetInnerHTML={{ __html: q.icon }} />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 1 }}>{q.label}</div>
-              <div style={{ fontSize: 10, color: C.dim }}>{q.sub}</div>
-            </div>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

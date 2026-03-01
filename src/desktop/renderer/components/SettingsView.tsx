@@ -238,7 +238,7 @@ export default function SettingsView({ gwOn, brOn, gwUrl, setGwUrl, configKeys, 
           <Input value={nv} onChange={setNv} placeholder="Value" type="password" style={{ flex: 1 }} />
           <Btn onClick={saveConfig}>Save</Btn>
         </div>
-        <div style={{ ...glass(0), overflow: "hidden", borderRadius: C.rs }}>
+        <div style={{ ...glass(0), overflow: "hidden", borderRadius: C.rs, marginBottom: 28 }}>
           {configKeys.length === 0 && <div style={{ padding: 16, textAlign: "center" as const, color: C.muted, fontSize: 11 }}>No entries.</div>}
           {configKeys.map(k => (
             <div key={k} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: `1px solid ${C.border}` }}>
@@ -246,6 +246,36 @@ export default function SettingsView({ gwOn, brOn, gwUrl, setGwUrl, configKeys, 
               <Btn v="d" onClick={async () => { await window.spa.config.delete(k); setConfigKeys(await window.spa.config.keys()); }} style={{ padding: "2px 8px", fontSize: 9 }}>Delete</Btn>
             </div>
           ))}
+        </div>
+
+        <Sec>Danger Zone</Sec>
+        <div style={{ ...glass(0), padding: 16, borderRadius: C.rs, borderLeft: `3px solid ${C.err}` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Reset Setup Wizard</div>
+              <div style={{ fontSize: 11, color: C.dim }}>Re-run the initial setup. Your keys and config are preserved.</div>
+            </div>
+            <Btn v="d" onClick={async () => {
+              if (confirm("Reset setup wizard? You'll be taken back to the welcome screen. Your keys and encrypted config will be preserved.")) {
+                await window.spa.setup.reset();
+                window.location.reload();
+              }
+            }} style={{ padding: "6px 16px", fontSize: 11, flexShrink: 0 }}>Reset Setup</Btn>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Factory Reset</div>
+              <div style={{ fontSize: 11, color: C.dim }}>Delete all keys, config, and data. This cannot be undone.</div>
+            </div>
+            <Btn v="d" onClick={async () => {
+              if (confirm("⚠️ FACTORY RESET — This will delete ALL keys, config, audit logs, and encrypted data. This cannot be undone. Are you sure?")) {
+                if (confirm("Final confirmation: Type of all data will be permanently deleted. Continue?")) {
+                  await window.spa.setup.factoryReset();
+                  window.location.reload();
+                }
+              }
+            }} style={{ padding: "6px 16px", fontSize: 11, flexShrink: 0 }}>Factory Reset</Btn>
+          </div>
         </div>
       </>)}
 
