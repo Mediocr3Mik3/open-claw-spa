@@ -73,21 +73,24 @@ export default function DashboardView({ onNav, gwOn, brOn, keys }: { onNav: (v: 
   return (
     <div style={{ padding: "18px 28px 28px", overflowY: "auto" as const, flex: 1, animation: "fadeIn .25s ease" }}>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 2, letterSpacing: -0.3 }}>Dashboard</h1>
-          <p style={{ fontSize: 12, color: C.dim }}>System health at a glance</p>
+          <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 3, letterSpacing: -0.4 }}>
+            {new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 18 ? "Good afternoon" : "Good evening"}
+          </h1>
+          <p style={{ fontSize: 12, color: C.dim }}>Your OpenClaw system at a glance</p>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", ...glass(0), borderRadius: C.rs }}>
-            <Dot color={gwOn ? C.ok : C.muted} pulse={gwOn} size={6} /><span style={{ fontSize: 10, color: C.dim }}>Gateway</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", ...glass(0), borderRadius: C.rs }}>
-            <Dot color={brOn ? C.ok : C.muted} pulse={brOn} size={6} /><span style={{ fontSize: 10, color: C.dim }}>Bridge</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", ...glass(0), borderRadius: C.rs }}>
-            <Dot color={chainOk ? C.ok : chainOk === false ? C.err : C.muted} size={6} /><span style={{ fontSize: 10, color: C.dim }}>Chain</span>
-          </div>
+          {[
+            { ok: gwOn, label: "Gateway", pulse: gwOn },
+            { ok: brOn, label: "Bridge", pulse: brOn },
+            { ok: chainOk === true, label: "Chain", pulse: false, err: chainOk === false },
+          ].map(s => (
+            <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", ...glass(0), borderRadius: C.rs, transition: "all .2s" }}>
+              <Dot color={s.err ? C.err : s.ok ? C.ok : C.muted} pulse={s.pulse} size={6} />
+              <span style={{ fontSize: 10, color: s.err ? C.err : s.ok ? C.text : C.dim, fontWeight: 500 }}>{s.label}</span>
+            </div>
+          ))}
         </div>
       </div>
 
