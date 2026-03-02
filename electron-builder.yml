@@ -12,7 +12,7 @@ files:
   - "!node_modules/**/*.{ts,map,md}"
 
 extraMetadata:
-  main: dist-electron/main/index.js
+  main: dist-electron/desktop/main/index.js
 
 mac:
   category: public.app-category.developer-tools
@@ -36,7 +36,6 @@ win:
       arch:
         - x64
         - arm64
-  publisherName: Michael Freeman
 
 nsis:
   oneClick: false

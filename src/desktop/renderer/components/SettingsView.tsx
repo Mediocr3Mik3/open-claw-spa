@@ -115,6 +115,133 @@ function ModelCard({ m, isActive, onSwitch, vaultKeys }: { m: ModelInfo; isActiv
   );
 }
 
+// ─── Mobile Pairing Section ──────────────────────────────────────────────
+
+function MobilePairingSection({ gwOn }: { gwOn: boolean }) {
+  const [pair, setPair] = useState<{ code: string; expires_at: number } | null>(null);
+  const [remaining, setRemaining] = useState(0);
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => {
+    window.spa.pairing.active().then((p: any) => {
+      if (p) { setPair({ code: p.code, expires_at: p.expires_at }); setRemaining(p.remaining_seconds); }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!pair) return;
+    const iv = setInterval(() => {
+      const left = Math.max(0, Math.round((pair.expires_at - Date.now()) / 1000));
+      setRemaining(left);
+      if (left <= 0) { setPair(null); }
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [pair]);
+
+  const generate = async () => {
+    setGenerating(true);
+    const p = await window.spa.pairing.generate();
+    setPair(p);
+    setRemaining(300);
+    setGenerating(false);
+  };
+
+  const revoke = async () => {
+    await window.spa.pairing.revoke();
+    setPair(null);
+    setRemaining(0);
+  };
+
+  const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  return (<>
+    <Sec>Pair with Mobile</Sec>
+    <p style={{ fontSize: 11, color: C.dim, marginBottom: 16 }}>
+      Connect the OpenClaw mobile app to this desktop. Open the mobile app → Get Started → "Link to Desktop" and enter the code shown below.
+    </p>
+
+    {!gwOn && (
+      <Card style={{ marginBottom: 16, borderLeft: `3px solid ${C.warn}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Dot color={C.warn} size={7} />
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.warn }}>Gateway not running</div>
+            <div style={{ fontSize: 11, color: C.dim }}>Start the gateway first so your mobile device can connect.</div>
+          </div>
+        </div>
+      </Card>
+    )}
+
+    {!pair ? (
+      <Card style={{ textAlign: "center" as const, padding: 32 }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>&#128241;</div>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Ready to pair</div>
+        <div style={{ fontSize: 11, color: C.dim, marginBottom: 20, maxWidth: 300, margin: "0 auto 20px" }}>
+          Generate a one-time 6-digit code. Enter it in the mobile app within 5 minutes.
+        </div>
+        <Btn onClick={generate} disabled={generating} style={{ margin: "0 auto", padding: "10px 32px", fontSize: 13 }}>
+          {generating ? "Generating..." : "Generate Pair Code"}
+        </Btn>
+      </Card>
+    ) : (
+      <Card style={{ textAlign: "center" as const, padding: 32, borderColor: C.borderAccent }}>
+        <div style={{ fontSize: 11, color: C.dim, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: 2, fontWeight: 600 }}>
+          Enter this code on your phone
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 16 }}>
+          {pair.code.split("").map((d, i) => (
+            <div key={i} style={{
+              width: 48, height: 60, display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 28, fontWeight: 800, fontFamily: C.mono, color: C.text,
+              background: C.grad, borderRadius: C.rs, WebkitBackgroundClip: "text" as any,
+              WebkitTextFillColor: "transparent" as any, border: `2px solid ${C.borderAccent}`,
+              ...glass(1),
+            }}>
+              {d}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 16 }}>
+          <Dot color={remaining > 60 ? C.ok : remaining > 30 ? C.warn : C.err} size={6} pulse />
+          <span style={{ fontSize: 12, fontFamily: C.mono, color: remaining > 60 ? C.ok : remaining > 30 ? C.warn : C.err, fontWeight: 600 }}>
+            {fmtTime(remaining)}
+          </span>
+          <span style={{ fontSize: 11, color: C.dim }}>remaining</span>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+          <Btn onClick={generate} style={{ padding: "6px 18px", fontSize: 11 }}>New Code</Btn>
+          <Btn v="d" onClick={revoke} style={{ padding: "6px 18px", fontSize: 11 }}>Cancel</Btn>
+        </div>
+      </Card>
+    )}
+
+    <Sec>How it works</Sec>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+      {[
+        { step: "1", title: "Generate code", desc: "Click the button above to create a one-time 6-digit pair code." },
+        { step: "2", title: "Enter on phone", desc: "Open the OpenClaw mobile app and choose 'Link to Desktop'." },
+        { step: "3", title: "Connected", desc: "Your phone connects to this gateway. Chat, deploy agents, anywhere." },
+      ].map(s => (
+        <div key={s.step} style={{ ...glass(0), padding: 16, borderRadius: C.rs }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: C.accent, marginBottom: 6 }}>{s.step}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{s.title}</div>
+          <div style={{ fontSize: 10, color: C.dim, lineHeight: 1.5 }}>{s.desc}</div>
+        </div>
+      ))}
+    </div>
+
+    <Card style={{ borderLeft: `3px solid ${C.accent}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 18 }}>&#128274;</span>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600 }}>Secure pairing</div>
+          <div style={{ fontSize: 10, color: C.dim }}>Codes are single-use and expire after 5 minutes. Your gateway URL and token are transferred encrypted. No data leaves your network.</div>
+        </div>
+      </div>
+    </Card>
+  </>);
+}
+
 // ─── Main Settings View ──────────────────────────────────────────────────
 
 export default function SettingsView({ gwOn, brOn, gwUrl, setGwUrl, configKeys, setConfigKeys, initialSub }: {
@@ -191,6 +318,7 @@ export default function SettingsView({ gwOn, brOn, gwUrl, setGwUrl, configKeys, 
   const TABS = [
     { id: "general", label: "General" },
     { id: "llm", label: "LLM & Models" },
+    { id: "mobile", label: "Mobile" },
     { id: "adapters", label: "Messaging" },
     { id: "org", label: "Organization" },
   ];
@@ -358,6 +486,9 @@ export default function SettingsView({ gwOn, brOn, gwUrl, setGwUrl, configKeys, 
           ))}
         </div>
       </>)}
+
+      {/* ─── Mobile Pairing ──────────────────────────────────────────── */}
+      {sub === "mobile" && (<MobilePairingSection gwOn={gwOn} />)}
 
       {/* ─── Messaging Adapters ────────────────────────────────────── */}
       {sub === "adapters" && (<>

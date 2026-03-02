@@ -147,12 +147,12 @@ export class WhisperFloAdapter extends BaseSTTAdapter {
     onEvent: RealtimeTranscriptionCallback,
   ): Promise<() => void> {
     // Dynamic import to avoid bundling ws in renderer
-    const { default: WebSocket } = await import("ws");
+    const WS = (await import("ws")).default as any;
 
     const wsUrl = this.config.endpoint.replace(/^http/, "ws") + "/realtime";
-    const ws = new WebSocket(wsUrl, {
+    const ws = new WS(wsUrl, {
       headers: this.config.api_key ? { Authorization: `Bearer ${this.config.api_key}` } : {},
-    });
+    }) as any;
 
     ws.on("open", () => {
       ws.send(JSON.stringify({
@@ -197,7 +197,7 @@ export class WhisperFloAdapter extends BaseSTTAdapter {
 
     // Return cleanup function
     return () => {
-      if (ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === 1 /* OPEN */) {
         ws.close();
       }
     };

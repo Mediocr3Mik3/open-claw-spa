@@ -238,6 +238,14 @@ const api = {
     isEnabled: (agentId: string) => ipcRenderer.invoke("learning:is-enabled", agentId),
   },
 
+  // ─── Mobile Pairing ──────────────────────────────────────────────
+  pairing: {
+    generate: () => ipcRenderer.invoke("pairing:generate"),
+    active: () => ipcRenderer.invoke("pairing:active"),
+    validate: (code: string) => ipcRenderer.invoke("pairing:validate", code),
+    revoke: () => ipcRenderer.invoke("pairing:revoke"),
+  },
+
   // ─── Security Events ──────────────────────────────────────────────
   onIntrusionAlert: (callback: (alert: unknown) => void) => {
     ipcRenderer.on("intrusion-alert", (_event, alert) => callback(alert));

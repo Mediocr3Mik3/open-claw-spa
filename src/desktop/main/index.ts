@@ -409,6 +409,56 @@ ipcMain.handle("config:keys", async () => {
   return getConfig().keys();
 });
 
+// ─── IPC Handlers: Mobile Pairing ────────────────────────────────────────
+
+let _pairCode: string | null = null;
+let _pairExpiry: number = 0;
+
+ipcMain.handle("pairing:generate", async () => {
+  _pairCode = String(Math.floor(100000 + Math.random() * 900000));
+  _pairExpiry = Date.now() + 5 * 60 * 1000; // 5 min expiry
+  getAudit().log({ event_type: "config_changed", detail: "Mobile pair code generated" });
+  return { code: _pairCode, expires_at: _pairExpiry };
+});
+
+ipcMain.handle("pairing:active", async () => {
+  if (!_pairCode || Date.now() > _pairExpiry) return null;
+  return { code: _pairCode, expires_at: _pairExpiry, remaining_seconds: Math.round((_pairExpiry - Date.now()) / 1000) };
+});
+
+ipcMain.handle("pairing:validate", async (_event, code: string) => {
+  if (!_pairCode || Date.now() > _pairExpiry) return { valid: false, reason: "expired" };
+  if (code !== _pairCode) return { valid: false, reason: "invalid" };
+  // Pair succeeded — return gateway connection info
+  const gwUrl = getConfig().get("gateway_url") ?? `ws://localhost:${getConfig().get("gateway_port") ?? 18789}`;
+  const token = getConfig().get("gateway_token") ?? "";
+  _pairCode = null; // one-time use
+  getAudit().log({ event_type: "config_changed", detail: "Mobile device paired successfully" });
+  return { valid: true, gateway_url: gwUrl, gateway_token: token };
+});
+
+ipcMain.handle("pairing:revoke", async () => {
+  _pairCode = null;
+  _pairExpiry = 0;
+  return true;
+});
+
+// ─── IPC Handlers: Encrypted Config ──────────────────────────────────────
+
+ipcMain.handle("config:get", async (_event, key: string) => {
+  return getConfig().get(key) ?? null;
+});
+
+ipcMain.handle("config:set", async (_event, key: string, value: string) => {
+  getConfig().set(key, value);
+  getAudit().log({ event_type: "config_changed", detail: `Config key set: ${key}` });
+  return true;
+});
+
+ipcMain.handle("config:delete", async (_event, key: string) => {
+  return getConfig().delete(key);
+});
+
 ipcMain.handle("config:get-all", async () => {
   // Return keys list only (values are sensitive)
   return getConfig().keys();
