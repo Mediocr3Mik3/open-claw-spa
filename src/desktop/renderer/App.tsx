@@ -72,7 +72,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
   ];
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: C.bg, fontFamily: C.font }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "transparent", fontFamily: C.font }}>
       <div style={{ width: 560, maxHeight: "90vh", overflowY: "auto" as const, ...glass(1), padding: "44px 44px", color: C.text, animation: "fadeIn .5s ease" }}>
         <div style={{ textAlign: "center" as const, marginBottom: 8 }}>
           <div style={{ fontSize: 28, fontWeight: 700, background: C.grad, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", letterSpacing: -0.5 }}>OpenClaw</div>
@@ -438,10 +438,35 @@ export default function App() {
           setPhase("zero_state");
         }
       } catch {
-        // If installer API not available, fall back to legacy flow
-        const setupDone = await window.spa.setup.isComplete();
-        setReady(setupDone);
-        setPhase(setupDone ? "ready" : "legacy_setup");
+        // If installer API fails (common on Windows first run), synthesize a not_installed detection
+        // so the zero-state install wizard always shows when setup isn't complete
+        try {
+          const setupDone = await window.spa.setup.isComplete();
+          if (setupDone) {
+            setReady(true);
+            setPhase("ready");
+          } else {
+            // Show zero-state with a synthetic detection — user needs to install
+            setDetection({
+              binary_found: false, binary_path: null, binary_version: null,
+              gateway_reachable: false, gateway_url: "ws://localhost:3210/ws",
+              config_found: false, config_path: null, spa_setup_complete: false,
+              platform: { os: navigator.platform?.includes("Win") ? "win32" : navigator.platform?.includes("Mac") ? "darwin" : "linux", arch: "x64", home: "" },
+              status: "not_installed",
+            } as DetectionResult);
+            setPhase("zero_state");
+          }
+        } catch {
+          // Last resort — still show zero_state so user isn't stuck
+          setDetection({
+            binary_found: false, binary_path: null, binary_version: null,
+            gateway_reachable: false, gateway_url: "ws://localhost:3210/ws",
+            config_found: false, config_path: null, spa_setup_complete: false,
+            platform: { os: "unknown", arch: "unknown", home: "" },
+            status: "not_installed",
+          } as DetectionResult);
+          setPhase("zero_state");
+        }
       }
     })();
   }, []);
@@ -496,7 +521,7 @@ export default function App() {
   ];
 
   // ─── Phase-based rendering ───
-  if (phase === "loading") return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: C.bg, color: C.dim, fontFamily: C.font }}><Spinner size={28} /></div>;
+  if (phase === "loading") return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "transparent", color: C.dim, fontFamily: C.font }}><Spinner size={28} /></div>;
 
   if (phase === "zero_state" && detection) return (
     <ZeroState
@@ -539,9 +564,9 @@ export default function App() {
   const isDarwin = navigator.userAgent.includes("Mac");
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: C.bg, color: C.text, fontFamily: C.font }}>
+    <div style={{ display: "flex", height: "100vh", background: "transparent", color: C.text, fontFamily: C.font }}>
       {/* ─── Sidebar ─── */}
-      <div style={{ width: 62, background: C.surface, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column" as const, alignItems: "center", paddingTop: isDarwin ? C.safePadTop : 12, gap: 0, flexShrink: 0 }}>
+      <div style={{ width: 62, background: C.surface, backdropFilter: "blur(12px)", borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column" as const, alignItems: "center", paddingTop: isDarwin ? C.safePadTop : 12, gap: 0, flexShrink: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 800, background: C.grad, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", marginBottom: 8, userSelect: "none" as const, letterSpacing: -0.5 }}>OC</div>
         {NAV.map(n => {
           const active = view === n.view;

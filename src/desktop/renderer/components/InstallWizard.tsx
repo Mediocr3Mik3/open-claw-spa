@@ -332,7 +332,7 @@ export default function InstallWizard({ detection, onComplete, onBack }: WizardP
   return (
     <div style={{
       display: "flex", height: "100vh", width: "100vw",
-      background: C.bg, color: C.text, fontFamily: C.font,
+      background: "transparent", color: C.text, fontFamily: C.font,
     }}>
       {/* Left sidebar: progress */}
       <div style={{

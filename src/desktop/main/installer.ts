@@ -283,7 +283,7 @@ export class OpenClawInstaller {
   private probeGatewayWs(url: string): Promise<boolean> {
     return new Promise((resolve) => {
       try {
-        const ws = new WebSocket(url, { handshakeTimeout: 3000 });
+        const ws = new (WebSocket as any)(url, { handshakeTimeout: 3000 });
         ws.on("open", () => { ws.close(); resolve(true); });
         ws.on("error", () => resolve(false));
         setTimeout(() => { try { ws.close(); } catch {} resolve(false); }, 4000);

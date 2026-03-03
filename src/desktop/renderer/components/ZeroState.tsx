@@ -80,7 +80,7 @@ export default function ZeroState({ detection, onBeginInstall, onConnectExisting
     <div style={{
       display: "flex", alignItems: "center", justifyContent: "center",
       height: "100vh", width: "100vw",
-      background: C.bg, color: C.text, fontFamily: C.font,
+      background: "transparent", color: C.text, fontFamily: C.font,
       position: "relative", overflow: "hidden",
     }}>
       {/* Ambient marble gradient background */}
