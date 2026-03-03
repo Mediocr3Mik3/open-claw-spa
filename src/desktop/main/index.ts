@@ -389,26 +389,6 @@ ipcMain.handle("setup:get-platform", async () => {
   };
 });
 
-// ─── IPC Handlers: Encrypted Config ──────────────────────────────────────
-
-ipcMain.handle("config:get", async (_event, key: string) => {
-  return getConfig().get(key) ?? null;
-});
-
-ipcMain.handle("config:set", async (_event, key: string, value: string) => {
-  getConfig().set(key, value);
-  getAudit().log({ event_type: "config_changed", detail: `Config key set: ${key}` });
-  return true;
-});
-
-ipcMain.handle("config:delete", async (_event, key: string) => {
-  return getConfig().delete(key);
-});
-
-ipcMain.handle("config:keys", async () => {
-  return getConfig().keys();
-});
-
 // ─── IPC Handlers: Mobile Pairing ────────────────────────────────────────
 
 let _pairCode: string | null = null;
@@ -459,7 +439,7 @@ ipcMain.handle("config:delete", async (_event, key: string) => {
   return getConfig().delete(key);
 });
 
-ipcMain.handle("config:get-all", async () => {
+ipcMain.handle("config:keys", async () => {
   // Return keys list only (values are sensitive)
   return getConfig().keys();
 });
