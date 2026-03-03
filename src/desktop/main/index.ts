@@ -13,7 +13,7 @@
  *   - Auto-updater integration
  */
 
-import { app, BrowserWindow, ipcMain, safeStorage, Tray, Menu, nativeImage, shell, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, safeStorage, Tray, Menu, nativeImage, shell, dialog, session } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import * as crypto from "crypto";
@@ -285,6 +285,18 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+
+  // Set CSP programmatically (works under file:// on all platforms, unlike meta tags)
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [
+          "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; form-action 'none'"
+        ],
+      },
+    });
   });
 
   // Load the renderer
