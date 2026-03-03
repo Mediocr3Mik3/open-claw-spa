@@ -124,6 +124,46 @@ function detectGPUs(): GPUInfo[] {
     } catch { /* no rocm-smi */ }
   }
 
+  // Windows WMI fallback (catches AMD, NVIDIA, Intel consumer GPUs without vendor CLIs)
+  if (gpus.length === 0 && os.platform() === "win32") {
+    try {
+      const wmic = execSync(
+        "wmic path win32_VideoController get name,AdapterRAM,DriverVersion /FORMAT:LIST",
+        { encoding: "utf-8" },
+      );
+      // WMI may return multiple GPU blocks separated by blank lines
+      const blocks = wmic.split(/\n\s*\n/).filter(b => b.includes("Name="));
+      for (const block of blocks) {
+        const nameMatch = block.match(/Name=([^\r\n]+)/);
+        const ramMatch = block.match(/AdapterRAM=(\d+)/);
+        const driverMatch = block.match(/DriverVersion=([^\r\n]+)/);
+        if (nameMatch) {
+          const gpuName = nameMatch[1].trim();
+          const nameLower = gpuName.toLowerCase();
+          const vram_bytes = ramMatch ? parseInt(ramMatch[1], 10) : 0;
+          const vram_gb = Math.round((vram_bytes / (1024 ** 3)) * 10) / 10;
+          const driver = driverMatch ? driverMatch[1].trim() : undefined;
+
+          let vendor: GPUVendor = "unknown";
+          if (nameLower.includes("amd") || nameLower.includes("radeon")) vendor = "amd";
+          else if (nameLower.includes("nvidia") || nameLower.includes("geforce") || nameLower.includes("quadro")) vendor = "nvidia";
+          else if (nameLower.includes("intel")) vendor = "intel";
+
+          // Skip virtual/basic display adapters
+          if (nameLower.includes("basic display") || nameLower.includes("virtual")) continue;
+
+          gpus.push({
+            name: gpuName,
+            vendor,
+            vram_gb,
+            ...(vendor === "amd" && driver ? { rocm_version: driver } : {}),
+            ...(vendor === "nvidia" && driver ? { cuda_version: driver } : {}),
+          });
+        }
+      }
+    } catch { /* WMI not available */ }
+  }
+
   // Apple Silicon
   if (gpus.length === 0 && os.platform() === "darwin" && os.arch() === "arm64") {
     try {
