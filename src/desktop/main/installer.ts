@@ -107,20 +107,20 @@ const BINARY_SEARCH_PATHS: Record<string, string[]> = {
   ],
 };
 
-/** Release download URLs by platform + arch */
-const RELEASE_URLS: Record<string, Record<string, string>> = {
-  darwin: {
-    arm64: "https://github.com/openclaw/openclaw/releases/latest/download/openclaw-darwin-arm64",
-    x64: "https://github.com/openclaw/openclaw/releases/latest/download/openclaw-darwin-x64",
-  },
-  linux: {
-    arm64: "https://github.com/openclaw/openclaw/releases/latest/download/openclaw-linux-arm64",
-    x64: "https://github.com/openclaw/openclaw/releases/latest/download/openclaw-linux-x64",
-  },
-  win32: {
-    x64: "https://github.com/openclaw/openclaw/releases/latest/download/openclaw-windows-x64.exe",
-    arm64: "https://github.com/openclaw/openclaw/releases/latest/download/openclaw-windows-arm64.exe",
-  },
+const GITHUB_REPO = "openclaw/openclaw";
+
+/** Platform keywords to match against GitHub release asset names */
+const PLATFORM_ASSET_PATTERNS: Record<string, string[]> = {
+  darwin: [".dmg", "-darwin", "-macos", "-mac"],
+  win32: [".exe", "-windows", "-win"],
+  linux: ["-linux", ".AppImage", ".deb", ".tar.gz"],
+};
+
+/** Extensions to prefer per platform (first match wins) */
+const PREFERRED_EXT: Record<string, string[]> = {
+  darwin: [".dmg", ".zip"],
+  win32: [".exe", ".msi", ".zip"],
+  linux: [".AppImage", ".deb", ".tar.gz"],
 };
 
 // ─── Security Presets ─────────────────────────────────────────────────────
@@ -296,14 +296,25 @@ export class OpenClawInstaller {
   // ─── Download ─────────────────────────────────────────────────────────
 
   async downloadBinary(): Promise<string> {
-    this.emit("download", "Preparing download...", 10);
+    this.emit("download", "Checking for latest release...", 10);
 
     const platform = process.platform;
-    const arch = process.arch;
-    const url = RELEASE_URLS[platform]?.[arch];
 
-    if (!url) {
-      throw new Error(`No OpenClaw binary available for ${platform}/${arch}`);
+    // Query GitHub Releases API for latest assets
+    const release = await this.fetchLatestRelease();
+    if (!release) {
+      throw new Error("Could not fetch release information from GitHub. Check your network connection.");
+    }
+
+    // Find the best matching asset for this platform
+    const asset = this.findPlatformAsset(release.assets, platform);
+    if (!asset) {
+      const available = release.assets.map((a: any) => a.name).join(", ");
+      throw new Error(
+        `No OpenClaw binary found for ${platform} in release ${release.tag_name}. ` +
+        `Available assets: ${available || "none"}. ` +
+        `Check https://github.com/${GITHUB_REPO}/releases for manual download.`
+      );
     }
 
     // Create bin directory
@@ -312,13 +323,11 @@ export class OpenClawInstaller {
       fs.mkdirSync(binDir, { recursive: true });
     }
 
-    const ext = platform === "win32" ? ".exe" : "";
-    const destPath = path.join(binDir, `openclaw${ext}`);
+    const destPath = path.join(binDir, asset.name);
 
-    this.emit("download", `Downloading OpenClaw for ${platform}/${arch}...`, 20);
+    this.emit("download", `Downloading ${asset.name} (${Math.round(asset.size / 1024 / 1024)}MB)...`, 20);
 
-    // Download using Node.js https module (no external deps)
-    await this.downloadFile(url, destPath, (percent) => {
+    await this.downloadFile(asset.browser_download_url, destPath, (percent) => {
       this.emit("download", `Downloading... ${percent}%`, 20 + Math.round(percent * 0.3));
     });
 
@@ -331,11 +340,48 @@ export class OpenClawInstaller {
     return destPath;
   }
 
+  private fetchLatestRelease(): Promise<any> {
+    return new Promise((resolve) => {
+      const https = require("https") as typeof import("https");
+      https.get(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+        headers: { "User-Agent": "openclaw-spa" },
+        timeout: 15000,
+      }, (res: any) => {
+        if (res.statusCode !== 200) { resolve(null); return; }
+        let data = "";
+        res.on("data", (c: string) => data += c);
+        res.on("end", () => { try { resolve(JSON.parse(data)); } catch { resolve(null); } });
+      }).on("error", () => resolve(null));
+    });
+  }
+
+  private findPlatformAsset(assets: any[], platform: string): any | null {
+    if (!assets || assets.length === 0) return null;
+    const patterns = PLATFORM_ASSET_PATTERNS[platform] ?? [];
+    const preferred = PREFERRED_EXT[platform] ?? [];
+
+    // Filter assets matching this platform
+    const matches = assets.filter((a: any) => {
+      const name = a.name.toLowerCase();
+      // Exclude debug symbols and checksums
+      if (name.includes("dsym") || name.includes("debug") || name.endsWith(".sha256") || name.endsWith(".sig")) return false;
+      return patterns.some(p => name.includes(p));
+    });
+
+    if (matches.length === 0) return null;
+    if (matches.length === 1) return matches[0];
+
+    // Prefer by extension order
+    for (const ext of preferred) {
+      const found = matches.find((a: any) => a.name.toLowerCase().endsWith(ext));
+      if (found) return found;
+    }
+    return matches[0];
+  }
+
   private downloadFile(url: string, dest: string, onProgress: (percent: number) => void): Promise<void> {
     return new Promise((resolve, reject) => {
       const https = require("https") as typeof import("https");
-      const http = require("http") as typeof import("http");
-      const protocol = url.startsWith("https") ? https : http;
 
       const request = (currentUrl: string, redirectCount: number = 0): void => {
         if (redirectCount > 5) {
@@ -343,7 +389,7 @@ export class OpenClawInstaller {
           return;
         }
 
-        protocol.get(currentUrl, { timeout: 60000 }, (res: any) => {
+        https.get(currentUrl, { timeout: 60000 }, (res: any) => {
           // Handle redirects (GitHub releases redirect)
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             request(res.headers.location, redirectCount + 1);
