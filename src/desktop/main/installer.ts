@@ -237,10 +237,10 @@ export class OpenClawInstaller {
       }
     }
 
-    // Try PATH lookup via `which` / `where`
+    // Try PATH lookup via `which` / `where` (cmd /c on Windows to avoid EINVAL)
     try {
-      const cmd = platform === "win32" ? "where openclaw" : "which openclaw";
-      const result = execSync(cmd, { encoding: "utf-8", timeout: 5000 }).trim().split("\n")[0];
+      const cmd = platform === "win32" ? "cmd /c where openclaw" : "which openclaw";
+      const result = execSync(cmd, { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).trim().split("\n")[0];
       if (result && fs.existsSync(result)) {
         const version = this.getBinaryVersion(result);
         return { found: true, path: result, version };
@@ -252,7 +252,8 @@ export class OpenClawInstaller {
 
   private getBinaryVersion(binPath: string): string | null {
     try {
-      return execSync(`"${binPath}" --version`, { encoding: "utf-8", timeout: 5000 }).trim();
+      const prefix = process.platform === "win32" ? "cmd /c " : "";
+      return execSync(`${prefix}"${binPath}" --version`, { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).trim();
     } catch {
       return null;
     }
@@ -345,15 +346,19 @@ export class OpenClawInstaller {
   private runInstallCommand(platform: string): Promise<{ success: boolean; output: string }> {
     return new Promise((resolve) => {
       const install = INSTALL_COMMANDS[platform] ?? INSTALL_COMMANDS.linux;
+      // On Windows, route through cmd /c to avoid spawn EINVAL bug in Node v20
+      const cmd = platform === "win32"
+        ? `cmd /c ${install.cmd} ${install.args.join(" ")}`
+        : `${install.cmd} ${install.args.join(" ")}`;
       try {
-        const output = execSync(`${install.cmd} ${install.args.join(" ")}`, {
+        const output = execSync(cmd, {
           encoding: "utf-8",
           timeout: 120_000,
-          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
         });
         resolve({ success: true, output });
       } catch (err: any) {
-        resolve({ success: false, output: err.message ?? String(err) });
+        resolve({ success: false, output: err.stderr ?? err.message ?? String(err) });
       }
     });
   }
@@ -361,15 +366,19 @@ export class OpenClawInstaller {
   private runInstallScript(platform: string): Promise<{ success: boolean; output: string }> {
     return new Promise((resolve) => {
       const script = INSTALL_SCRIPTS[platform] ?? INSTALL_SCRIPTS.linux;
+      // Build the full command — on Windows, cmd /c wraps PowerShell invocation
+      const cmd = platform === "win32"
+        ? `cmd /c ${script.cmd} ${script.args.join(" ")}`
+        : `${script.cmd} ${script.args.map(a => `"${a}"`).join(" ")}`;
       try {
-        const output = execSync(`${script.cmd} ${script.args.map(a => `"${a}"`).join(" ")}`, {
+        const output = execSync(cmd, {
           encoding: "utf-8",
           timeout: 180_000,
-          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
         });
         resolve({ success: true, output });
       } catch (err: any) {
-        resolve({ success: false, output: err.message ?? String(err) });
+        resolve({ success: false, output: err.stderr ?? err.message ?? String(err) });
       }
     });
   }
@@ -380,10 +389,10 @@ export class OpenClawInstaller {
     for (const p of searchPaths) {
       if (fs.existsSync(p)) return p;
     }
-    // Try PATH lookup
+    // Try PATH lookup (cmd /c on Windows to avoid spawn EINVAL in Node v20)
     try {
-      const cmd = process.platform === "win32" ? "where openclaw" : "which openclaw";
-      const result = execSync(cmd, { encoding: "utf-8", timeout: 5000 }).trim().split("\n")[0];
+      const cmd = process.platform === "win32" ? "cmd /c where openclaw" : "which openclaw";
+      const result = execSync(cmd, { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).trim().split("\n")[0];
       if (result && fs.existsSync(result.trim())) return result.trim();
     } catch { /* not in PATH */ }
     return null;
