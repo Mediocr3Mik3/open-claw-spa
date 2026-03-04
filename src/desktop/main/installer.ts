@@ -101,26 +101,27 @@ const BINARY_SEARCH_PATHS: Record<string, string[]> = {
     path.join(OPENCLAW_DIR, "bin/openclaw"),
   ],
   win32: [
+    path.join(process.env["APPDATA"] ?? "", "npm", "openclaw.cmd"),
+    path.join(process.env["APPDATA"] ?? "", "npm", "openclaw"),
+    path.join(os.homedir(), ".local", "bin", "openclaw.cmd"),
     path.join(process.env["PROGRAMFILES"] ?? "C:\\Program Files", "OpenClaw", "openclaw.exe"),
     path.join(process.env["LOCALAPPDATA"] ?? "", "OpenClaw", "openclaw.exe"),
     path.join(os.homedir(), ".openclaw", "bin", "openclaw.exe"),
   ],
 };
 
-const GITHUB_REPO = "openclaw/openclaw";
-
-/** Platform keywords to match against GitHub release asset names */
-const PLATFORM_ASSET_PATTERNS: Record<string, string[]> = {
-  darwin: [".dmg", "-darwin", "-macos", "-mac"],
-  win32: [".exe", "-windows", "-win"],
-  linux: ["-linux", ".AppImage", ".deb", ".tar.gz"],
+/** Install commands by platform */
+const INSTALL_COMMANDS: Record<string, { cmd: string; args: string[] }> = {
+  win32: { cmd: "npm", args: ["install", "-g", "openclaw@latest"] },
+  darwin: { cmd: "npm", args: ["install", "-g", "openclaw@latest"] },
+  linux: { cmd: "npm", args: ["install", "-g", "openclaw@latest"] },
 };
 
-/** Extensions to prefer per platform (first match wins) */
-const PREFERRED_EXT: Record<string, string[]> = {
-  darwin: [".dmg", ".zip"],
-  win32: [".exe", ".msi", ".zip"],
-  linux: [".AppImage", ".deb", ".tar.gz"],
+/** Fallback install scripts (official OpenClaw installers) */
+const INSTALL_SCRIPTS: Record<string, { cmd: string; args: string[] }> = {
+  win32: { cmd: "powershell", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "& ([scriptblock]::Create((iwr -useb https://openclaw.ai/install.ps1))) -NoOnboard"] },
+  darwin: { cmd: "bash", args: ["-c", "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard"] },
+  linux: { cmd: "bash", args: ["-c", "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard"] },
 };
 
 // ─── Security Presets ─────────────────────────────────────────────────────
@@ -296,139 +297,96 @@ export class OpenClawInstaller {
   // ─── Download ─────────────────────────────────────────────────────────
 
   async downloadBinary(): Promise<string> {
-    this.emit("download", "Checking for latest release...", 10);
-
     const platform = process.platform;
 
-    // Query GitHub Releases API for latest assets
-    const release = await this.fetchLatestRelease();
-    if (!release) {
-      throw new Error("Could not fetch release information from GitHub. Check your network connection.");
-    }
-
-    // Find the best matching asset for this platform
-    const asset = this.findPlatformAsset(release.assets, platform);
-    if (!asset) {
-      const available = release.assets.map((a: any) => a.name).join(", ");
-      throw new Error(
-        `No OpenClaw binary found for ${platform} in release ${release.tag_name}. ` +
-        `Available assets: ${available || "none"}. ` +
-        `Check https://github.com/${GITHUB_REPO}/releases for manual download.`
-      );
-    }
-
-    // Create bin directory
-    const binDir = path.join(OPENCLAW_DIR, "bin");
-    if (!fs.existsSync(binDir)) {
-      fs.mkdirSync(binDir, { recursive: true });
-    }
-
-    const destPath = path.join(binDir, asset.name);
-
-    this.emit("download", `Downloading ${asset.name} (${Math.round(asset.size / 1024 / 1024)}MB)...`, 20);
-
-    await this.downloadFile(asset.browser_download_url, destPath, (percent) => {
-      this.emit("download", `Downloading... ${percent}%`, 20 + Math.round(percent * 0.3));
-    });
-
-    // Make executable on Unix
-    if (platform !== "win32") {
-      fs.chmodSync(destPath, 0o755);
-    }
-
-    this.emit("download", "Download complete", 50);
-    return destPath;
-  }
-
-  private fetchLatestRelease(): Promise<any> {
-    return new Promise((resolve) => {
-      const https = require("https") as typeof import("https");
-      https.get(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
-        headers: { "User-Agent": "openclaw-spa" },
-        timeout: 15000,
-      }, (res: any) => {
-        if (res.statusCode !== 200) { resolve(null); return; }
-        let data = "";
-        res.on("data", (c: string) => data += c);
-        res.on("end", () => { try { resolve(JSON.parse(data)); } catch { resolve(null); } });
-      }).on("error", () => resolve(null));
-    });
-  }
-
-  private findPlatformAsset(assets: any[], platform: string): any | null {
-    if (!assets || assets.length === 0) return null;
-    const patterns = PLATFORM_ASSET_PATTERNS[platform] ?? [];
-    const preferred = PREFERRED_EXT[platform] ?? [];
-
-    // Filter assets matching this platform
-    const matches = assets.filter((a: any) => {
-      const name = a.name.toLowerCase();
-      // Exclude debug symbols and checksums
-      if (name.includes("dsym") || name.includes("debug") || name.endsWith(".sha256") || name.endsWith(".sig")) return false;
-      return patterns.some(p => name.includes(p));
-    });
-
-    if (matches.length === 0) return null;
-    if (matches.length === 1) return matches[0];
-
-    // Prefer by extension order
-    for (const ext of preferred) {
-      const found = matches.find((a: any) => a.name.toLowerCase().endsWith(ext));
-      if (found) return found;
-    }
-    return matches[0];
-  }
-
-  private downloadFile(url: string, dest: string, onProgress: (percent: number) => void): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const https = require("https") as typeof import("https");
-
-      const request = (currentUrl: string, redirectCount: number = 0): void => {
-        if (redirectCount > 5) {
-          reject(new Error("Too many redirects"));
-          return;
+    // 1. Try npm install (primary method — OpenClaw is an npm package)
+    this.emit("download", "Installing OpenClaw via npm...", 10);
+    try {
+      const npmResult = await this.runInstallCommand(platform);
+      if (npmResult.success) {
+        this.emit("download", "npm install complete, locating binary...", 40);
+        const binPath = this.locateInstalledBinary();
+        if (binPath) {
+          this.emit("download", "OpenClaw installed successfully", 50);
+          return binPath;
         }
+      }
+    } catch {
+      this.emit("download", "npm install failed, trying fallback installer...", 25);
+    }
 
-        https.get(currentUrl, { timeout: 60000 }, (res: any) => {
-          // Handle redirects (GitHub releases redirect)
-          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            request(res.headers.location, redirectCount + 1);
-            return;
-          }
+    // 2. Fallback: run the official platform install script
+    this.emit("download", "Running official OpenClaw installer...", 30);
+    try {
+      const scriptResult = await this.runInstallScript(platform);
+      if (scriptResult.success) {
+        this.emit("download", "Installer complete, locating binary...", 45);
+        const binPath = this.locateInstalledBinary();
+        if (binPath) {
+          this.emit("download", "OpenClaw installed successfully", 50);
+          return binPath;
+        }
+      }
+    } catch {
+      // both methods failed
+    }
 
-          if (res.statusCode !== 200) {
-            reject(new Error(`Download failed: HTTP ${res.statusCode}`));
-            return;
-          }
+    throw new Error(
+      `Could not install OpenClaw automatically on ${platform}. ` +
+      `Please install manually:\n` +
+      (platform === "win32"
+        ? `  PowerShell: iwr -useb https://openclaw.ai/install.ps1 | iex\n`
+        : `  Terminal: curl -fsSL https://openclaw.ai/install.sh | bash\n`) +
+      `  Or: npm install -g openclaw@latest\n` +
+      `Then restart this app.`
+    );
+  }
 
-          const totalBytes = parseInt(res.headers["content-length"] ?? "0", 10);
-          let receivedBytes = 0;
-          const fileStream = fs.createWriteStream(dest);
-
-          res.on("data", (chunk: Buffer) => {
-            receivedBytes += chunk.length;
-            fileStream.write(chunk);
-            if (totalBytes > 0) {
-              onProgress(Math.round((receivedBytes / totalBytes) * 100));
-            }
-          });
-
-          res.on("end", () => {
-            fileStream.end();
-            onProgress(100);
-            resolve();
-          });
-
-          res.on("error", (err: Error) => {
-            fileStream.close();
-            fs.unlinkSync(dest);
-            reject(err);
-          });
-        }).on("error", reject);
-      };
-
-      request(url);
+  private runInstallCommand(platform: string): Promise<{ success: boolean; output: string }> {
+    return new Promise((resolve) => {
+      const install = INSTALL_COMMANDS[platform] ?? INSTALL_COMMANDS.linux;
+      try {
+        const output = execSync(`${install.cmd} ${install.args.join(" ")}`, {
+          encoding: "utf-8",
+          timeout: 120_000,
+          windowsHide: true,
+        });
+        resolve({ success: true, output });
+      } catch (err: any) {
+        resolve({ success: false, output: err.message ?? String(err) });
+      }
     });
+  }
+
+  private runInstallScript(platform: string): Promise<{ success: boolean; output: string }> {
+    return new Promise((resolve) => {
+      const script = INSTALL_SCRIPTS[platform] ?? INSTALL_SCRIPTS.linux;
+      try {
+        const output = execSync(`${script.cmd} ${script.args.map(a => `"${a}"`).join(" ")}`, {
+          encoding: "utf-8",
+          timeout: 180_000,
+          windowsHide: true,
+        });
+        resolve({ success: true, output });
+      } catch (err: any) {
+        resolve({ success: false, output: err.message ?? String(err) });
+      }
+    });
+  }
+
+  private locateInstalledBinary(): string | null {
+    // Check known paths
+    const searchPaths = BINARY_SEARCH_PATHS[process.platform] ?? [];
+    for (const p of searchPaths) {
+      if (fs.existsSync(p)) return p;
+    }
+    // Try PATH lookup
+    try {
+      const cmd = process.platform === "win32" ? "where openclaw" : "which openclaw";
+      const result = execSync(cmd, { encoding: "utf-8", timeout: 5000 }).trim().split("\n")[0];
+      if (result && fs.existsSync(result.trim())) return result.trim();
+    } catch { /* not in PATH */ }
+    return null;
   }
 
   // ─── Configuration ────────────────────────────────────────────────────
