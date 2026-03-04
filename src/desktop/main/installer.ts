@@ -18,7 +18,7 @@ import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 import * as crypto from "crypto";
-import { execSync, spawn, ChildProcess } from "child_process";
+import { execSync, exec, spawn, ChildProcess } from "child_process";
 import { app } from "electron";
 import WebSocket from "ws";
 
@@ -350,16 +350,26 @@ export class OpenClawInstaller {
       const cmd = platform === "win32"
         ? `cmd /c ${install.cmd} ${install.args.join(" ")}`
         : `${install.cmd} ${install.args.join(" ")}`;
-      try {
-        const output = execSync(cmd, {
-          encoding: "utf-8",
-          timeout: 120_000,
-          stdio: ["ignore", "pipe", "pipe"],
-        });
-        resolve({ success: true, output });
-      } catch (err: any) {
-        resolve({ success: false, output: err.stderr ?? err.message ?? String(err) });
-      }
+
+      this.emit("download", `Running: ${install.cmd} ${install.args.join(" ")}`, 15);
+
+      const child = exec(cmd, { encoding: "utf-8", timeout: 120_000 }, (err, stdout, stderr) => {
+        if (err) {
+          resolve({ success: false, output: stderr || err.message });
+        } else {
+          resolve({ success: true, output: stdout });
+        }
+      });
+
+      // Stream output for progress feedback
+      child.stdout?.on("data", (data: string) => {
+        const line = data.toString().trim();
+        if (line) this.emit("download", line.slice(0, 120), 20);
+      });
+      child.stderr?.on("data", (data: string) => {
+        const line = data.toString().trim();
+        if (line) this.emit("download", line.slice(0, 120), 20);
+      });
     });
   }
 
@@ -370,16 +380,25 @@ export class OpenClawInstaller {
       const cmd = platform === "win32"
         ? `cmd /c ${script.cmd} ${script.args.join(" ")}`
         : `${script.cmd} ${script.args.map(a => `"${a}"`).join(" ")}`;
-      try {
-        const output = execSync(cmd, {
-          encoding: "utf-8",
-          timeout: 180_000,
-          stdio: ["ignore", "pipe", "pipe"],
-        });
-        resolve({ success: true, output });
-      } catch (err: any) {
-        resolve({ success: false, output: err.stderr ?? err.message ?? String(err) });
-      }
+
+      this.emit("download", "Running official installer script...", 30);
+
+      const child = exec(cmd, { encoding: "utf-8", timeout: 180_000 }, (err, stdout, stderr) => {
+        if (err) {
+          resolve({ success: false, output: stderr || err.message });
+        } else {
+          resolve({ success: true, output: stdout });
+        }
+      });
+
+      child.stdout?.on("data", (data: string) => {
+        const line = data.toString().trim();
+        if (line) this.emit("download", line.slice(0, 120), 35);
+      });
+      child.stderr?.on("data", (data: string) => {
+        const line = data.toString().trim();
+        if (line) this.emit("download", line.slice(0, 120), 35);
+      });
     });
   }
 
