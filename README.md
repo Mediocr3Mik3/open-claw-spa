@@ -45,6 +45,37 @@ User → [Sign prompt with private key] → SPA1: token
                                Execute tools          Block & log
 ```
 
+## Installation
+
+### Windows
+
+```powershell
+npm run setup:win
+```
+
+> Run PowerShell as Administrator for first setup. This enables long file paths and
+> clears any corrupt npm cache before installing.
+
+### macOS / Linux
+
+```bash
+npm run setup:unix
+```
+
+> `npm run rebuild` is required because keytar and better-sqlite3 are native addons
+> that must be compiled against Electron's Node.js version, not the system version.
+
+### First-time setup (all platforms)
+
+```bash
+npx tsx src/cli/main.ts onboard
+```
+
+> The onboarding wizard walks you through messaging platform config, LLM selection,
+> key generation, and optional Tailscale node linking in one flow.
+
+---
+
 ## Quick Start
 
 ```bash
@@ -266,6 +297,18 @@ Features: OS keychain storage, WebSocket gateway, command palette (⌘K), keyboa
 > ⚠️ **Alpha** — React Native/Expo. May need adjustments. PRs welcome!
 
 On-device RSA key generation, biometric auth for elevated/admin prompts, WebSocket connection.
+
+## Docker
+
+```bash
+docker-compose up
+```
+
+> Spins up the gateway and a sample agent container. Copy `.env.example` to `.env`
+> and fill in your keys before running. See the commented Tailscale sidecar block
+> in `docker-compose.yml` for multi-node setups.
+
+---
 
 ## Environment Variables
 

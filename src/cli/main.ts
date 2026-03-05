@@ -43,6 +43,8 @@ import { PROVIDER_REGISTRY } from "../providers/registry.js";
 import { APIKeyVault, KEY_FORMATS, type VaultBackend } from "../providers/vault.js";
 import { EncryptedConfig } from "../enterprise/encrypted-config.js";
 import { SpendTracker } from "../providers/spend-tracker.js";
+import { runOnboard } from "./onboard.js";
+import { cmdSkillInstall, cmdSkillList, cmdSkillRemove, cmdSkillUpdate } from "./skill.js";
 
 // ─── Paths ───────────────────────────────────────────────────────────────
 
@@ -420,6 +422,15 @@ function cmdHelp(): void {
 
     spend     Show current month spend summary
 
+    onboard   Run the first-time setup wizard
+              (environment check, messaging, LLM, key gen, Tailscale)
+
+    skill     Skill management
+      install <name-or-url>                 Install a skill from ClawHub or GitHub
+      list                                  List installed skills
+      remove  <name>                        Remove an installed skill
+      update  <name>                        Update a skill to latest version
+
     help      Show this help message
 
   Environment:
@@ -473,6 +484,20 @@ if (fullCommand in asyncCommands) {
       break;
     }
     case "spend":   cmdSpend(); break;
+    case "onboard": {
+      runOnboard().catch(e => { console.error(e); process.exit(1); });
+      break;
+    }
+    case "skill": {
+      const sub = process.argv[3];
+      const target = process.argv[4] ?? "";
+      if (sub === "install") { cmdSkillInstall(target).catch(e => { console.error(e); process.exit(1); }); }
+      else if (sub === "list") { cmdSkillList(); }
+      else if (sub === "remove") { cmdSkillRemove(target); }
+      else if (sub === "update") { cmdSkillUpdate(target).catch(e => { console.error(e); process.exit(1); }); }
+      else { console.error("Usage: skill <install|list|remove|update> [name]"); }
+      break;
+    }
     case "help":
     default:        cmdHelp(); break;
   }

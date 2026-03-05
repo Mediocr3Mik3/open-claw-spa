@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "build:electron-main": "tsc -p tsconfig.electron.json && echo '{\"name\":\"openclaw-spa-electron\",\"main\":\"desktop/main/index.js\",\"type\":\"commonjs\"}' > dist-electron/package.json",
+    "build:electron-main": "tsc -p tsconfig.electron.json && node -e \"require('fs').writeFileSync('dist-electron/package.json', JSON.stringify({name:'openclaw-spa-electron',main:'desktop/main/index.js',type:'commonjs'}))\"",
     "build:electron-renderer": "vite build",
     "build:electron": "npm run build:electron-main && npm run build:electron-renderer",
     "build:all": "npm run build && npm run build:electron",
@@ -29,7 +29,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src/ --ext .ts,.tsx",
-    "clean": "rm -rf dist dist-electron dist-renderer"
+    "clean": "rm -rf dist dist-electron dist-renderer",
+    "setup:win": "powershell -ExecutionPolicy Bypass -File scripts/setup-win.ps1",
+    "setup:unix": "bash scripts/setup-unix.sh",
+    "postinstall": "node scripts/check-native-deps.js"
   },
   "keywords": [
     "openclaw",

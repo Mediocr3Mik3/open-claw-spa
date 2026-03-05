@@ -1,0 +1,68 @@
+# ─── OpenClaw SPA — Docker Compose ────────────────────────────────────────
+#
+# Usage:
+#   1. Copy .env.example to .env and fill in your keys
+#   2. docker-compose up
+#
+# Services:
+#   gateway — Main messaging bridge (port 3210)
+#   agent   — Example second agent instance (demonstrates multi-agent setup)
+
+services:
+  gateway:
+    build: .
+    container_name: openclaw-gateway
+    restart: unless-stopped
+    ports:
+      - "3210:3210"
+    env_file:
+      - .env
+    environment:
+      - PORT=3210
+    volumes:
+      - openclaw-data:/root/.openclaw-spa
+
+  agent:
+    build: .
+    container_name: openclaw-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=3211
+    volumes:
+      - openclaw-agent-data:/root/.openclaw-spa
+    depends_on:
+      - gateway
+
+  # ─── Tailscale Sidecar (Community Pattern) ──────────────────────────────
+  #
+  # Uncomment the block below to link this node to a Tailscale mesh network.
+  # This is the community-standard method for bridging local and VPS
+  # OpenClaw instances over a secure WireGuard tunnel.
+  #
+  # Prerequisites:
+  #   1. Create an auth key at https://login.tailscale.com/admin/settings/keys
+  #   2. Set TAILSCALE_AUTHKEY in your .env file
+  #
+  # tailscale:
+  #   image: tailscale/tailscale:latest
+  #   container_name: openclaw-tailscale
+  #   hostname: openclaw-node
+  #   restart: unless-stopped
+  #   cap_add:
+  #     - NET_ADMIN
+  #     - SYS_MODULE
+  #   volumes:
+  #     - tailscale-state:/var/lib/tailscale
+  #     - /dev/net/tun:/dev/net/tun
+  #   environment:
+  #     - TS_AUTHKEY=${TAILSCALE_AUTHKEY:-}
+  #     - TS_STATE_DIR=/var/lib/tailscale
+  #     - TS_EXTRA_ARGS=--advertise-tags=tag:openclaw
+  #   network_mode: service:gateway
+
+volumes:
+  openclaw-data:
+  openclaw-agent-data:
+  # tailscale-state:
